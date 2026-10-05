@@ -85,11 +85,12 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       _hasFrame = false;
       _status = 'Signing in…';
     });
-    await _disconnect();
-    if (!mounted) return;
-    var transport = KvmTransport(_profile);
-    _transport = transport;
+    KvmTransport? transport;
     try {
+      await _disconnect();
+      if (!mounted) return;
+      transport = KvmTransport(_profile);
+      _transport = transport;
       try {
         await transport.login(_password.text, onStatus: _setStatus);
       } on KvmCertificateException catch (certificate) {
@@ -141,7 +142,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         _connecting = false;
         _connected = true;
       });
-      await WakelockPlus.enable();
+      await _keepAwake(true);
       _focus.requestFocus();
       if (!_hasFrame) {
         _frameTimeout = Timer(const Duration(seconds: 25), () {
@@ -153,6 +154,15 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       }
     } catch (error) {
       if (mounted && _transport == transport) _fail(error.toString());
+    }
+  }
+
+  Future<void> _keepAwake(bool enabled) async {
+    try {
+      await WakelockPlus.toggle(enable: enabled);
+    } catch (error) {
+      // Screen-awake support must not prevent login or connection cleanup.
+      debugPrint('GLKVM could not change screen-awake state: $error');
     }
   }
 
@@ -184,7 +194,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _video = null;
     _states = null;
     transport?.releaseAll();
-    await WakelockPlus.disable();
+    await _keepAwake(false);
     await states?.cancel();
     await video?.close();
     await transport?.close();
