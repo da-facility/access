@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
@@ -8,6 +7,8 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'kvm_keys.dart';
 import 'kvm_profile.dart';
+import 'kvm_pointer.dart';
+import 'kvm_session_viewport.dart';
 import 'kvm_transport.dart';
 import 'kvm_video.dart';
 
@@ -33,8 +34,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   bool _hasFrame = false;
   String _status = 'Enter the KVM admin password to connect.';
   String? _error;
-  int? _pointer;
-  String? _pointerButton;
+  bool _dragging = false;
   final _modifiers = <String>{};
   Timer? _frameTimeout;
   int? _activePort;
@@ -74,7 +74,13 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       _connecting = false;
       _connected = false;
     });
+    _sessionUi(false);
     _disconnect();
+  }
+
+  void _sessionUi(bool active) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+        overlays: active ? [] : SystemUiOverlay.values);
   }
 
   Future<void> _connect() async {
@@ -85,6 +91,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       _hasFrame = false;
       _status = 'Signing in…';
     });
+    _sessionUi(true);
     KvmTransport? transport;
     try {
       await _disconnect();
@@ -185,7 +192,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
 
   Future<void> _disconnect() async {
     _frameTimeout?.cancel();
-    _pointer = null;
+    _dragging = false;
     _modifiers.clear();
     final transport = _transport;
     final video = _video;
@@ -207,6 +214,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     setState(() {
       _switchingPort = true;
       _modifiers.clear();
+      _dragging = false;
     });
     try {
       await transport.request('POST', '/api/switch/set_active',
@@ -229,7 +237,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state != AppLifecycleState.resumed) {
       _transport?.releaseAll();
-      _pointer = null;
+      _dragging = false;
       _modifiers.clear();
     }
     if (state == AppLifecycleState.paused && (_connected || _connecting)) {
@@ -243,6 +251,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _frameTimeout?.cancel();
     _renderer.onFirstFrameRendered = null;
     _renderer.onResize = null;
+    _sessionUi(false);
     _disconnect().whenComplete(() => _renderer.dispose());
     _password.dispose();
     _focus.dispose();
@@ -255,6 +264,11 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   }
 
   void _click(String button) {
+    if (_dragging) {
+      _transport?.button('left', false);
+      setState(() => _dragging = false);
+      if (button == 'left') return;
+    }
     _transport?.button(button, true);
     _transport?.button(button, false);
   }
@@ -273,7 +287,10 @@ class _KvmSessionPageState extends State<KvmSessionPage>
 
   Future<void> _keyboard() async {
     _transport?.releaseAll();
-    setState(() => _modifiers.clear());
+    setState(() {
+      _modifiers.clear();
+      _dragging = false;
+    });
     final text = TextEditingController();
     await showModalBottomSheet<void>(
         context: context,
@@ -330,213 +347,221 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                       ]),
                 )));
     text.dispose();
-    if (mounted) _focus.requestFocus();
+    if (mounted) {
+      _sessionUi(true);
+      _focus.requestFocus();
+    }
   }
 
-  Widget _display() => LayoutBuilder(builder: (context, constraints) {
-        final ratio = _renderer.videoWidth > 0 && _renderer.videoHeight > 0
-            ? _renderer.videoWidth / _renderer.videoHeight
-            : 16 / 9;
-        var width = constraints.maxWidth;
-        var height = width / ratio;
-        if (height > constraints.maxHeight) {
-          height = constraints.maxHeight;
-          width = height * ratio;
-        }
-        void move(Offset position) =>
-            _transport?.move(position.dx / width, position.dy / height);
-        return Center(
-            child: SizedBox(
-                width: width,
-                height: height,
-                child: Listener(
-                  onPointerDown: (event) {
-                    if (!_connected || !_hasFrame || _pointer != null) return;
-                    _focus.requestFocus();
-                    _pointer = event.pointer;
-                    _pointerButton = event.buttons & kSecondaryMouseButton != 0
-                        ? 'right'
-                        : 'left';
-                    move(event.localPosition);
-                    _transport?.button(_pointerButton!, true);
-                  },
-                  onPointerHover: (event) {
-                    if (_connected && _hasFrame) move(event.localPosition);
-                  },
-                  onPointerMove: (event) {
-                    if (_pointer == event.pointer) move(event.localPosition);
-                  },
-                  onPointerUp: (event) {
-                    if (_pointer != event.pointer) return;
-                    _transport?.button(_pointerButton!, false);
-                    _pointer = null;
-                  },
-                  onPointerCancel: (event) {
-                    if (_pointer != event.pointer) return;
-                    _transport?.releaseAll();
-                    _pointer = null;
-                  },
-                  onPointerSignal: (event) {
-                    if (event is PointerScrollEvent &&
-                        _connected &&
-                        _hasFrame) {
-                      _transport?.wheel(-event.scrollDelta.dx.sign.toInt(),
-                          -event.scrollDelta.dy.sign.toInt());
-                    }
-                  },
-                  child: _initialized
-                      ? RTCVideoView(_renderer,
-                          objectFit: RTCVideoViewObjectFit
-                              .RTCVideoViewObjectFitContain)
-                      : const SizedBox.shrink(),
-                )));
-      });
+  Widget _control(String label, IconData icon, VoidCallback? action,
+      {bool selected = false, String? caption}) {
+    final color = action == null
+        ? Colors.white30
+        : selected
+            ? Colors.lightBlueAccent
+            : Colors.white;
+    return SizedBox(
+      width: 48,
+      height: 48,
+      child: caption == null
+          ? IconButton(
+              tooltip: label,
+              onPressed: action,
+              color: color,
+              disabledColor: Colors.white30,
+              icon: Icon(icon, size: 23),
+            )
+          : Tooltip(
+              message: label,
+              child: TextButton(
+                onPressed: action,
+                style: TextButton.styleFrom(
+                    foregroundColor: color,
+                    disabledForegroundColor: Colors.white30,
+                    backgroundColor: selected ? Colors.white12 : null,
+                    padding: EdgeInsets.zero),
+                child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(icon, size: 20, color: color),
+                      Text(caption, style: const TextStyle(fontSize: 10)),
+                    ]),
+              )),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(_profile.name), actions: [
-          if (_connected && _profile.model == 'RM4PE')
+  Widget _session() {
+    final ready = _connected && _hasFrame;
+    final ratio = _renderer.videoWidth > 0 && _renderer.videoHeight > 0
+        ? _renderer.videoWidth / _renderer.videoHeight
+        : 16 / 9;
+    return Focus(
+      focusNode: _focus,
+      onFocusChange: (focused) {
+        if (!focused) {
+          _transport?.releaseAll();
+          if (mounted) {
+            setState(() {
+              _modifiers.clear();
+              _dragging = false;
+            });
+          }
+        }
+      },
+      onKeyEvent: (_, event) {
+        if (!ready) return KeyEventResult.ignored;
+        final key = kvmKey(event.physicalKey);
+        if (key == null) return KeyEventResult.ignored;
+        _transport?.key(key, event is! KeyUpEvent);
+        return KeyEventResult.handled;
+      },
+      child: KvmSessionViewport(
+        aspectRatio: ratio,
+        leading: [
+          _control('Back', Icons.arrow_back, () => Navigator.pop(context)),
+          _control('Keyboard', Icons.keyboard, ready ? _keyboard : null),
+          _control(
+              'Left click', Icons.mouse, ready ? () => _click('left') : null,
+              caption: 'Left'),
+          _control(
+              'Right click', Icons.mouse, ready ? () => _click('right') : null,
+              caption: 'Right'),
+          _control(
+              _dragging ? 'Release drag' : 'Drag',
+              Icons.pan_tool_alt,
+              ready
+                  ? () {
+                      setState(() => _dragging = !_dragging);
+                      _transport?.button('left', _dragging);
+                    }
+                  : null,
+              selected: _dragging,
+              caption: 'Drag'),
+          _control('Scroll up', Icons.keyboard_arrow_up,
+              ready ? () => _transport?.wheel(0, 3) : null),
+          _control('Scroll down', Icons.keyboard_arrow_down,
+              ready ? () => _transport?.wheel(0, -3) : null),
+          if (_profile.model == 'RM4PE')
             PopupMenuButton<int>(
-              tooltip: _activePort == null
-                  ? 'Select Comet X port'
-                  : 'Port ${_activePort! + 1}',
-              enabled: !_switchingPort,
-              icon: const Icon(Icons.input),
+              tooltip: 'Select Comet X port',
+              enabled: ready && !_switchingPort,
+              icon: const Icon(Icons.input, color: Colors.white),
               onSelected: _switchPort,
               itemBuilder: (_) => [
                 for (var port = 0; port < 4; port++)
                   CheckedPopupMenuItem(
                       value: port,
                       checked: _activePort == port,
-                      child: Text('Port ${port + 1}'))
+                      child: Text('Port ${port + 1}')),
               ],
             ),
-          if (_connected)
-            IconButton(
-                tooltip: 'Disconnect',
-                icon: const Icon(Icons.close),
-                onPressed: () {
-                  setState(() {
-                    _connected = false;
-                    _connecting = false;
-                    _hasFrame = false;
-                    _status = 'Disconnected';
-                  });
-                  _disconnect();
-                }),
-        ]),
-        body: SafeArea(
-            child: Column(children: [
-          if (!_connected && !_connecting)
-            Expanded(
-                child: ListView(padding: const EdgeInsets.all(20), children: [
-              Text('${_profile.modelName} · ${_profile.address}',
-                  style: Theme.of(context).textTheme.titleMedium),
+        ],
+        trailing: [
+          for (final entry
+              in {'Esc': 'Escape', 'Tab': 'Tab', '↵': 'Enter'}.entries)
+            SizedBox(
+                width: 48,
+                height: 48,
+                child: TextButton(
+                    onPressed: ready ? () => _tapKey(entry.value) : null,
+                    style: TextButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        disabledForegroundColor: Colors.white30,
+                        padding: EdgeInsets.zero),
+                    child: Text(entry.key))),
+          for (final entry in {
+            'Ctrl': 'ControlLeft',
+            'Alt': 'AltLeft',
+            'Shift': 'ShiftLeft',
+            '⌘': 'MetaLeft'
+          }.entries)
+            SizedBox(
+                width: 48,
+                height: 48,
+                child: TextButton(
+                    onPressed: ready ? () => _modifier(entry.value) : null,
+                    style: TextButton.styleFrom(
+                        foregroundColor: _modifiers.contains(entry.value)
+                            ? Colors.lightBlueAccent
+                            : Colors.white,
+                        disabledForegroundColor: Colors.white30,
+                        backgroundColor: _modifiers.contains(entry.value)
+                            ? Colors.white12
+                            : null,
+                        padding: EdgeInsets.zero),
+                    child: Text(entry.key))),
+        ],
+        display: Stack(children: [
+          Positioned.fill(
+              child: KvmPointer(
+            enabled: ready,
+            onFocus: _focus.requestFocus,
+            onMove: (position) => _transport?.move(position.dx, position.dy),
+            onButton: (button, down) => _transport?.button(button, down),
+            onTap: () => _click('left'),
+            onScroll: (x, y) => _transport?.wheel(x, y),
+            child: _initialized
+                ? RTCVideoView(_renderer,
+                    objectFit:
+                        RTCVideoViewObjectFit.RTCVideoViewObjectFitContain)
+                : const SizedBox.shrink(),
+          )),
+          if (!_hasFrame)
+            Center(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const CircularProgressIndicator(),
               const SizedBox(height: 16),
-              if (_error != null)
-                Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(_error!,
-                        style: TextStyle(
-                            color: Theme.of(context).colorScheme.error))),
-              Text(_status),
-              const SizedBox(height: 16),
-              TextField(
-                  controller: _password,
-                  obscureText: true,
-                  autocorrect: false,
-                  enableSuggestions: false,
-                  decoration:
-                      const InputDecoration(labelText: 'Admin password'),
-                  onSubmitted: (_) => _connect()),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                  onPressed: _initialized ? _connect : null,
-                  child: const Text('Connect')),
-              const SizedBox(height: 16),
-              const Text(
-                  'Touch the video to click or drag. Use the keyboard button to send text. External keyboards and mice are supported.'),
+              Text(_status, style: const TextStyle(color: Colors.white)),
             ]))
-          else ...[
-            Padding(padding: const EdgeInsets.all(8), child: Text(_status)),
-            Expanded(
-                child: Focus(
-                    focusNode: _focus,
-                    onFocusChange: (focused) {
-                      if (!focused) {
-                        _transport?.releaseAll();
-                        _modifiers.clear();
-                      }
-                    },
-                    onKeyEvent: (_, event) {
-                      if (!_connected || !_hasFrame) {
-                        return KeyEventResult.ignored;
-                      }
-                      final key = kvmKey(event.physicalKey);
-                      if (key == null) return KeyEventResult.ignored;
-                      _transport?.key(key, event is! KeyUpEvent);
-                      return KeyEventResult.handled;
-                    },
-                    child: Container(
-                        color: Colors.black,
-                        child: Stack(children: [
-                          Positioned.fill(child: _display()),
-                          if (!_hasFrame)
-                            const Center(child: CircularProgressIndicator()),
-                        ])))),
-            if (_connected)
-              SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Focus(
-                      canRequestFocus: false,
-                      descendantsAreFocusable: false,
-                      child: Row(children: [
-                        IconButton(
-                            tooltip: 'Keyboard',
-                            onPressed: _hasFrame ? _keyboard : null,
-                            icon: const Icon(Icons.keyboard)),
-                        TextButton(
-                            onPressed: _hasFrame ? () => _click('right') : null,
-                            child: const Text('Right click')),
-                        for (final entry in {
-                          'Esc': 'Escape',
-                          'Tab': 'Tab',
-                          'Enter': 'Enter',
-                          'Del': 'Delete'
-                        }.entries)
-                          TextButton(
-                              onPressed:
-                                  _hasFrame ? () => _tapKey(entry.value) : null,
-                              child: Text(entry.key)),
-                        for (final entry in {
-                          'Ctrl': 'ControlLeft',
-                          'Alt': 'AltLeft',
-                          'Shift': 'ShiftLeft',
-                          '⌘': 'MetaLeft'
-                        }.entries)
-                          Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 3),
-                              child: FilterChip(
-                                  label: Text(entry.key),
-                                  selected: _modifiers.contains(entry.value),
-                                  onSelected: _hasFrame
-                                      ? (_) => _modifier(entry.value)
-                                      : null)),
-                        IconButton(
-                            tooltip: 'Scroll up',
-                            onPressed: _hasFrame
-                                ? () => _transport?.wheel(0, 3)
-                                : null,
-                            icon: const Icon(Icons.keyboard_arrow_up)),
-                        IconButton(
-                            tooltip: 'Scroll down',
-                            onPressed: _hasFrame
-                                ? () => _transport?.wheel(0, -3)
-                                : null,
-                            icon: const Icon(Icons.keyboard_arrow_down)),
-                      ]))),
-          ],
-        ])),
+          else if (_status != 'Connected')
+            Align(
+                alignment: Alignment.topCenter,
+                child: Container(
+                    color: Colors.black87,
+                    padding: const EdgeInsets.all(8),
+                    child: Text(_status,
+                        style: const TextStyle(color: Colors.white)))),
+        ]),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: _connected || _connecting ? Colors.black : null,
+        appBar: _connected || _connecting
+            ? null
+            : AppBar(title: Text(_profile.name)),
+        body: _connected || _connecting
+            ? _session()
+            : SafeArea(
+                child: ListView(padding: const EdgeInsets.all(20), children: [
+                Text('${_profile.modelName} · ${_profile.address}',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 16),
+                if (_error != null)
+                  Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: Text(_error!,
+                          style: TextStyle(
+                              color: Theme.of(context).colorScheme.error))),
+                Text(_status),
+                const SizedBox(height: 16),
+                TextField(
+                    controller: _password,
+                    obscureText: true,
+                    autocorrect: false,
+                    enableSuggestions: false,
+                    decoration:
+                        const InputDecoration(labelText: 'Admin password'),
+                    onSubmitted: (_) => _connect()),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                    onPressed: _initialized ? _connect : null,
+                    child: const Text('Connect')),
+                const SizedBox(height: 16),
+                const Text(
+                    'Swipe the video to move the pointer. Tap to click at the pointer. Use Drag to hold the left button while moving, then tap Drag again to release. External keyboards and mice are supported.'),
+              ])),
       );
 }

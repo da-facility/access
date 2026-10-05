@@ -10,7 +10,8 @@ The new session uses GLKVM's HTTP, WebSocket and Janus protocols. A GLKVM addres
 - Client definitions and approved certificate fingerprints persist locally. Passwords and session tokens are not saved.
 - A self-signed certificate requires approval of its SHA-256 fingerprint. Trust applies only to that client's host, port and certificate. Changing the address clears the saved fingerprint.
 - When the KVM requires touchscreen approval, the app waits for approval and reports expiry.
-- Touch the displayed video to click and drag. The app maps coordinates to the video rectangle, excluding its letterboxing. The toolbar provides right click and scrolling.
+- Swipe the video as a trackpad to move the pointer without pressing a mouse button. Tap to click at the pointer. Left and Right buttons click without moving it. Drag holds the left button while you swipe; tap Drag again to release. Scroll arrows move the remote page.
+- Sessions hide the title, connected-status bar and system overlays. Landscape uses safe side margins with compact controls around an aspect-correct video display. Portrait puts the controls above and below the display. Back is the first control at the top left; leaving the session restores the system overlays.
 - External keyboards send physical key codes. External mice support pointing, left/right buttons and scrolling. The keyboard sheet sends text and provides navigation keys.
 - Leaving the app releases held keys and mouse buttons. Returning from the background requires a new connection.
 - Comet X has a four-port selector. It sends the explicit port identity `1.1` through `1.4` and reads the resulting switch state.
@@ -28,7 +29,7 @@ This table compares the current implementation with the GLKVM console. "Implemen
 | Password login and Q device approval | Login dialogs | Implemented against GLKVM auth endpoints |
 | TLS trust | Connection trust UI | Per-client certificate approval implemented |
 | Video | Remote display and scaling | H.264 Janus/WebRTC implemented; H.265, Direct mode and FEC/adaptive transports need separate support |
-| Mouse | Pointer and touch input | Absolute input, click, drag, right click and wheel implemented; relative mode, sensitivity, inversion and richer gestures remain |
+| Mouse | Pointer and touch input | Touch trackpad, direct physical-mouse input, click, latched drag, right click and wheel implemented using absolute HID coordinates; relative HID mode, sensitivity, inversion and richer gestures remain |
 | Keyboard | Keys and modifiers | Hardware keys, modifier controls, text sending and navigation keys implemented; layout selection, macros and live software typing remain |
 | Clipboard | Text transfer | One-way text injection implemented; reading remote text requires OCR or another KVM mechanism |
 | Comet X channels | Monitor selection is a UI analogue | Four-port selection implemented against the switch API; hardware testing required |
@@ -107,17 +108,18 @@ The command makes a signed Release app, packages `flutter/build/ios-device/Acces
 
 ## Verification
 
-The focused test suite is `flutter test test/glinet_kvm_test.dart test/glinet_clients_test.dart test/glinet_login_test.dart`. It covers address validation, profile serialization, physical key mapping, coordinate bounds, login-cookie forwarding, input events, text injection and key/button release on disconnect. The UI tests save a client through the editor, verify it appears under Connection, reload its definition from disk, and check that a failed screen-awake plugin cannot freeze sign-in. Protocol tests use a local fixture; passing them alone does not establish hardware compatibility.
+The focused test suite is `flutter test test/glinet_kvm_test.dart test/glinet_clients_test.dart test/glinet_login_test.dart test/glinet_pointer_test.dart`. It covers address validation, profile serialization, physical key mapping, coordinate bounds, login-cookie forwarding, input events, text injection and key/button release on disconnect. The UI tests save a client through the editor, verify it appears under Connection, reload its definition from disk, and check that a failed screen-awake plugin cannot freeze sign-in. Protocol tests use a local fixture; passing them alone does not establish hardware compatibility.
 
 Verified on 2026-10-05:
 
-- Five focused tests pass. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
+- Eight focused tests pass, including trackpad swipes without clicks, taps at the current pointer, physical-mouse button release and landscape video sizing beside safe controls. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
 - The full app builds and runs on an ARM64 iPhone simulator with iOS 27. The Connection screen retains RustDesk's ID field and peer tabs and adds GL.iNet clients.
 - A native simulator smoke test using the production KVM transport and renderer authenticated to a Comet Q over Tailscale and received 1920×1080 H.264 video.
 - The same native test sent absolute mouse movement and verified keyboard input by toggling the connected Mac's Caps Lock LED state, then restoring its original state. Text injection, clicks and drags have protocol coverage but still need interactive hardware acceptance testing.
 - A native simulator test reproduces a screen-awake plugin channel mismatch before login. Pinning the Dart interface to the native plugin's matching version fixes it. KVM sessions also tolerate screen-awake failures so they cannot block login or cleanup.
 - The native transport rejects the Comet Q's untrusted certificate, closes that connection, then authenticates and opens the input socket after pinning the verified certificate. Screen-awake enable and disable both succeed.
-- The Release iPhone app builds, signs and passes `codesign --verify --deep --strict`. Installation through Wireless Wire completed at 100%, and querying the phone confirms Access build 69 is installed with the login fix. The user confirmed that it opens on the physical phone. The bridge cannot start the iOS 27 debugserver, so opening the app remains a manual step. Physical-phone login needs a retest with the corrected build.
+- The Release iPhone app builds, signs and passes `codesign --verify --deep --strict`. Installation through Wireless Wire completed at 100%, and querying the phone confirms Access build 70 is installed with the pointer and full-screen layout update. The user confirmed that it opens on the physical phone. The bridge cannot start the iOS 27 debugserver, so opening the app remains a manual step. The user confirmed video and login work on build 69. The pointer/layout update needs interactive acceptance on the phone.
+- A native test opens the production session page, logs into the Comet Q, receives video and confirms the session has no AppBar. Landscape screenshots verify the enlarged video and side controls.
 - Comet X hardware is not available for testing. Four-port switching remains unverified on hardware.
 
 The Device Hub accessibility interface timed out, so simulator screen rendering was inspected with `simctl` screenshots. The saved-client workflow has widget test coverage. Real-device tests do not yet cover every session control, background transition or reconnect.
@@ -131,6 +133,6 @@ The Device Hub accessibility interface timed out, so simulator screen rendering 
 - The iOS project selects the correct Rust archive for simulator/device, raises its deployment target to iOS 15, and uses a distinct bundle ID and display name. The Podfile raises pod deployment targets to match Xcode 27. Info.plist adds local-network permission text and the required scene manifest. The app-icon PNGs change only for the requested grayscale branding.
 - `AppDelegate.swift` starts and registers plugins with an explicit Flutter engine. New `SceneDelegate.swift` attaches its window and forwards scene lifecycle and URL events. This startup change is required because iOS 27 terminates applications that do not adopt scenes. Cold-start RustDesk deep links need additional acceptance testing.
 - The libvpx overlay changes only ARM64 simulator builds because its upstream iOS target selects the physical-device SDK. Other libvpx builds retain the prior path.
-- New KVM state and protocol code live in `flutter/lib/glinet`. `kvm_session_page.dart` catches screen-awake failures and includes initial cleanup in its connection error handling, preventing the reported sign-in freeze. No RustDesk session protocol, server configuration or peer storage was replaced.
+- New KVM state and protocol code live in `flutter/lib/glinet`. `kvm_session_page.dart` catches screen-awake failures and includes initial cleanup in its connection error handling, preventing the reported sign-in freeze. It also uses the new feature-local pointer and viewport widgets, manages the drag button, and hides/restores system overlays during KVM sessions. These changes implement the requested trackpad controls and full-screen layout without changing RustDesk remote sessions. No RustDesk session protocol, server configuration or peer storage was replaced.
 
 Known limits include English-only new labels, manual reconnect, no saved passwords, no separate 2FA challenge UI beyond Comet Q touchscreen approval, no video transport fallback, and unverified Comet X hardware behavior. Use the device console for features not yet implemented.
