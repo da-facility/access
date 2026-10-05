@@ -24,7 +24,7 @@ This table compares the current implementation with the GLKVM console. "Implemen
 
 | Capability | Existing RustDesk overlap | This fork and remaining work |
 | --- | --- | --- |
-| Saved connections | Peer list and Settings | Implemented as a separate GL.iNet client list |
+| Saved connections | Peer list, address book and Settings | Local GL.iNet list plus per-account RustDesk and KVM address books through the included API server |
 | Direct LAN / Tailscale connection | Direct remote sessions | Implemented using the KVM origin; VPN must already be connected |
 | Password login and Q device approval | Login dialogs | Implemented against GLKVM auth endpoints; optional per-client password storage in iOS Keychain |
 | TLS trust | Connection trust UI | Per-client certificate approval implemented |
@@ -40,7 +40,7 @@ This table compares the current implementation with the GLKVM console. "Implemen
 | Power / wake / accessories | Remote actions UI | ATX, Wake-on-LAN and Fingerbot operations require separate device capabilities and APIs |
 | Terminal | Terminal UI | Requires the KVM terminal or serial protocol and its authorization |
 | Recording / screenshots / OCR | Capture controls | Not implemented for KVM sessions |
-| Discovery / cloud / sharing | Address book and accounts | GL.iNet discovery, cloud binding, relay, accounts and sharing remain separate work |
+| Discovery / cloud / sharing | Address book and accounts | Basic Access accounts and personal books implemented; GL.iNet discovery, cloud binding, relay and shared books remain separate work |
 | Firmware / network / security administration | Settings patterns | Keep in the KVM console until model-specific APIs and failure recovery are tested |
 | Session recovery and multi-client control | Reconnect UI | Manual reconnect implemented; automatic recovery, exclusivity and conflict indicators remain |
 | Localization and accessibility | RustDesk translations and widgets | New KVM copy is English; translation and broader VoiceOver testing remain |
@@ -54,6 +54,12 @@ Protocol sources inspected on 2026-10-05:
 - [GLKVM Janus client](https://github.com/gl-inet/glkvm/blob/main/web/share/js/kvm/stream_janus.js), including watch/start negotiation.
 - [GLKVM switch API](https://github.com/gl-inet/glkvm/blob/main/kvmd/apps/kvmd/api/switch.py).
 - [Comet Q console guide](https://docs.gl-inet.com/kvm/en/user_guide/gl-rmq1/console_guide/) and [Comet X console guide](https://docs.gl-inet.com/kvm/en/user_guide/gl-rm4pe/console_guide/).
+
+## Account address books
+
+The optional [Access API server](../services/address-book/README.md) provides separate accounts and personal address books. Set its HTTPS origin in Settings → ID/Relay Server → API Server, then log in using the existing Account controls. Keep the existing RustDesk ID/relay configuration. The address-book tab uses its existing Add ID/editor for RustDesk machines and shows a GL.iNet KVMs row when the API server advertises that extension.
+
+The account KVM page supports adding, editing, removing and connecting to Comet Q/X entries, plus copying an existing local client into the account. KVM passwords remain in the phone's Keychain, scoped to the API origin and account. Approved certificate fingerprints persist in the account without adding account entries to the device's local KVM list. Other API servers keep the existing address-book UI.
 
 ## Building on an Apple Silicon Mac
 
@@ -112,7 +118,7 @@ The focused test suite is `flutter test test/glinet_kvm_test.dart test/glinet_cl
 
 Verified on 2026-10-05:
 
-- Thirteen focused tests pass, including trackpad swipes without clicks, taps at the current pointer, physical-mouse button release, two-finger scrolling in all four directions without clicks or zoom, pinch zoom/reset with scaled pointer motion, and equal control spacing in both orientations. Password tests verify masked prefill, forgetting a saved password, and separation by client, origin and username. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
+- Fourteen focused tests pass, including trackpad swipes without clicks, taps at the current pointer, physical-mouse button release, two-finger scrolling in all four directions without clicks or zoom, pinch zoom/reset with scaled pointer motion, and equal control spacing in both orientations. Password tests verify masked prefill, forgetting a saved password, and separation by client, origin and username. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
 - The full app builds and runs on an ARM64 iPhone simulator with iOS 27. The Connection screen retains RustDesk's ID field and peer tabs and adds GL.iNet clients.
 - A native simulator smoke test using the production KVM transport and renderer authenticated to a Comet Q over Tailscale and received 1920×1080 H.264 video.
 - The same native test sent absolute mouse movement and verified keyboard input by toggling the connected Mac's Caps Lock LED state, then restoring its original state. Text injection, clicks and drags have protocol coverage but still need interactive hardware acceptance testing.
@@ -122,6 +128,8 @@ Verified on 2026-10-05:
 - A native test opens the production session page, logs into the Comet Q, receives video and confirms the session has no AppBar. Landscape screenshots verify the enlarged video and side controls. A further native test pinches the production session to 200%, verifies the percentage button, taps it, and confirms the zoom returns to 100%.
 - Signed Release build 72 includes Remember password and is packaged as `flutter/build/ios-device/Access-build72.ipa`. It passes signature verification and awaits the phone reconnecting through Wireless Wire.
 - A native Keychain test logs into the Comet Q through the production session page, saves the password, relaunches the app, verifies masked prefill and then unchecks Remember password to verify deletion.
+- Signed build 73 includes account address books and is packaged as `flutter/build/ios-device/Access-build73.ipa`, awaiting the phone reconnecting through Wireless Wire.
+- The included API server passes three integration tests covering authentication, ownership isolation, persistence, RustDesk CRUD/tags/pagination and KVM validation. Browser testing signs into a disposable account and saves/reloads a RustDesk connection and Comet X. Native simulator testing uses the unmodified RustDesk login/address-book models to authenticate and add/reload/delete a peer, then uses the account KVM editor to add a KVM and reload it from the server. A Flutter test checks account/server isolation of Keychain identities.
 - Comet X hardware is not available for testing. Four-port switching remains unverified on hardware.
 
 The Device Hub accessibility interface timed out, so simulator screen rendering was inspected with `simctl` screenshots. The saved-client workflow has widget test coverage. Real-device tests do not yet cover every session control, background transition or reconnect.
@@ -141,3 +149,5 @@ The Device Hub accessibility interface timed out, so simulator screen rendering 
 - `scripts/ios/build.sh` now ad-hoc signs simulator builds so iOS Keychain access works. Device signing is unchanged.
 
 Known limits include English-only new labels, manual reconnect, no separate 2FA challenge UI beyond Comet Q touchscreen approval, no video transport fallback, and unverified Comet X hardware behavior. Use the device console for features not yet implemented.
+
+The account-address-book change modifies three existing runtime files. `common/widgets/address_book.dart` adds an iOS-only, capability-gated GL.iNet row. `glinet/kvm_clients_page.dart` exposes the existing editor through an additive helper, leaving local editing unchanged. `glinet/kvm_session_page.dart` accepts an optional trust-save callback so account entries save certificate pins to the account instead of entering the local client list; sessions without that callback keep local storage. The new API/page modules and `services/address-book` contain the remaining implementation. RustDesk authentication, peer models, ID/relay routing and remote-session code are unchanged.

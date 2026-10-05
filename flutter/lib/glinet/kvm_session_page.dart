@@ -15,7 +15,9 @@ import 'kvm_video.dart';
 
 class KvmSessionPage extends StatefulWidget {
   final KvmProfile profile;
-  const KvmSessionPage({super.key, required this.profile});
+  final Future<void> Function(KvmProfile)? saveTrustedProfile;
+  const KvmSessionPage(
+      {super.key, required this.profile, this.saveTrustedProfile});
   @override
   State<KvmSessionPage> createState() => _KvmSessionPageState();
 }
@@ -168,7 +170,11 @@ class _KvmSessionPageState extends State<KvmSessionPage>
           throw const KvmException('Certificate was not trusted.');
         }
         _profile = _profile.trust(certificate.fingerprint);
-        await KvmProfiles.instance.save(_profile);
+        if (widget.saveTrustedProfile != null) {
+          await widget.saveTrustedProfile!(_profile);
+        } else {
+          await KvmProfiles.instance.save(_profile);
+        }
         transport = KvmTransport(_profile);
         _transport = transport;
         await transport.login(_password.text, onStatus: _setStatus);

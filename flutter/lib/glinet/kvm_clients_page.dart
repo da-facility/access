@@ -4,6 +4,11 @@ import 'package:uuid/uuid.dart';
 import 'kvm_profile.dart';
 import 'kvm_session_page.dart';
 
+Future<KvmProfile?> editKvmProfile(BuildContext context,
+        {KvmProfile? profile}) =>
+    Navigator.of(context).push<KvmProfile>(
+        MaterialPageRoute(builder: (_) => _KvmEditor(profile: profile)));
+
 class KvmClientsPage extends StatefulWidget {
   const KvmClientsPage({super.key});
   @override

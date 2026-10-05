@@ -21,6 +21,7 @@ import 'package:flex_color_picker/flex_color_picker.dart';
 import '../../common.dart';
 import 'dialog.dart';
 import 'login.dart';
+import '../../glinet/access_book_page.dart';
 
 final hideAbTagsPanel = false.obs;
 
@@ -48,6 +49,10 @@ class _AddressBookState extends State<AddressBook> {
         } else {
           return Column(
             children: [
+              if (isIOS)
+                AccessBookLink(
+                    key: ValueKey(gFFI.userModel.userName.value),
+                    account: gFFI.userModel.userName.value),
               // NOT use Offstage to wrap LinearProgressIndicator
               if (gFFI.abModel.currentAbLoading.value &&
                   gFFI.abModel.currentAbEmpty)
