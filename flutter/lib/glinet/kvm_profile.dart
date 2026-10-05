@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:uuid/uuid.dart';
 
+import 'kvm_password_store.dart';
+
 class KvmProfile {
   final String id;
   final String name;
@@ -40,6 +42,7 @@ class KvmProfile {
   }
 
   Uri get uri => parseAddress(address);
+  String get credentialKey => jsonEncode([id, uri.origin, username]);
   String get modelName => model == 'RM4PE' ? 'Comet X' : 'Comet Q';
 
   KvmProfile trust(String fingerprint) => KvmProfile(
@@ -106,6 +109,9 @@ class KvmProfiles extends ChangeNotifier {
     if (index < 0) {
       next.add(profile);
     } else {
+      if (next[index].credentialKey != profile.credentialKey) {
+        await KvmPasswordStore.delete(next[index].credentialKey);
+      }
       next[index] = profile;
     }
     await _write(next);
@@ -113,6 +119,7 @@ class KvmProfiles extends ChangeNotifier {
 
   Future<void> remove(KvmProfile profile) async {
     await load();
+    await KvmPasswordStore.delete(profile.credentialKey);
     await _write(_profiles.where((e) => e.id != profile.id).toList());
   }
 

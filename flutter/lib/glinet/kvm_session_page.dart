@@ -7,6 +7,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import 'kvm_keys.dart';
 import 'kvm_profile.dart';
+import 'kvm_password_store.dart';
 import 'kvm_pointer.dart';
 import 'kvm_session_viewport.dart';
 import 'kvm_transport.dart';
@@ -30,6 +31,9 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   KvmVideo? _video;
   StreamSubscription? _states;
   bool _initialized = false;
+  bool _credentialsLoaded = false;
+  bool _rememberPassword = false;
+  bool _updatingPassword = false;
   bool _connecting = false;
   bool _connected = false;
   bool _hasFrame = false;
@@ -46,6 +50,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _zoom.addListener(_refreshZoom);
+    _loadPassword();
     _renderer.initialize().then((_) {
       if (mounted) setState(() => _initialized = true);
     }).catchError((Object error) {
@@ -63,6 +68,37 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _renderer.onResize = () {
       if (mounted) setState(() {});
     };
+  }
+
+  Future<void> _loadPassword() async {
+    try {
+      final saved = await KvmPasswordStore.read(_profile.credentialKey);
+      if (!mounted) return;
+      _password.text = saved ?? '';
+      _rememberPassword = saved != null;
+    } catch (_) {
+      if (mounted) {
+        _error =
+            'Could not read the saved password. You can enter it manually.';
+      }
+    } finally {
+      if (mounted) setState(() => _credentialsLoaded = true);
+    }
+  }
+
+  Future<void> _remember(bool remember) async {
+    setState(() => _updatingPassword = true);
+    try {
+      if (!remember) await KvmPasswordStore.delete(_profile.credentialKey);
+      if (mounted) setState(() => _rememberPassword = remember);
+    } catch (_) {
+      if (mounted) {
+        setState(
+            () => _error = 'Could not remove the saved password. Try again.');
+      }
+    } finally {
+      if (mounted) setState(() => _updatingPassword = false);
+    }
   }
 
   void _refreshZoom() {
@@ -90,7 +126,11 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   }
 
   Future<void> _connect() async {
-    if (_connecting || !_initialized || _password.text.isEmpty) return;
+    if (_connecting ||
+        !_initialized ||
+        !_credentialsLoaded ||
+        _updatingPassword ||
+        _password.text.isEmpty) return;
     setState(() {
       _connecting = true;
       _error = null;
@@ -137,7 +177,12 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         await transport.close();
         return;
       }
-      _password.clear();
+      if (_rememberPassword) {
+        await KvmPasswordStore.write(_profile.credentialKey, _password.text);
+        if (!mounted || _transport != transport) return;
+      } else {
+        _password.clear();
+      }
       _setStatus('Opening keyboard and mouse…');
       _states =
           transport.states.stream.listen(_onState, onError: (Object error) {
@@ -573,6 +618,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                 const SizedBox(height: 16),
                 TextField(
                     controller: _password,
+                    enabled: _credentialsLoaded,
                     obscureText: true,
                     autocorrect: false,
                     enableSuggestions: false,
@@ -580,8 +626,19 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                         const InputDecoration(labelText: 'Admin password'),
                     onSubmitted: (_) => _connect()),
                 const SizedBox(height: 16),
+                CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Remember password'),
+                    value: _rememberPassword,
+                    onChanged: _credentialsLoaded && !_updatingPassword
+                        ? (value) => _remember(value ?? false)
+                        : null),
                 ElevatedButton(
-                    onPressed: _initialized ? _connect : null,
+                    onPressed:
+                        _initialized && _credentialsLoaded && !_updatingPassword
+                            ? _connect
+                            : null,
                     child: const Text('Connect')),
                 const SizedBox(height: 16),
                 const Text(

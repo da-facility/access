@@ -7,7 +7,7 @@ The new session uses GLKVM's HTTP, WebSocket and Janus protocols. A GLKVM addres
 ## Connection and controls
 
 - Addresses default to HTTPS. Include a port when needed. URL paths, embedded passwords, query strings and fragments are rejected.
-- Client definitions and approved certificate fingerprints persist locally. Passwords and session tokens are not saved.
+- Client definitions and approved certificate fingerprints persist locally. Enable Remember password to save a password in the iOS Keychain after successful login and prefill it on the next visit. Unchecking it immediately removes the saved copy. Changing the client address or username, or deleting the client, also removes its saved password. Keychain entries stay on this device and are available only while it is unlocked. Session tokens are not saved.
 - A self-signed certificate requires approval of its SHA-256 fingerprint. Trust applies only to that client's host, port and certificate. Changing the address clears the saved fingerprint.
 - When the KVM requires touchscreen approval, the app waits for approval and reports expiry.
 - Swipe the video as a trackpad to move the pointer without pressing a mouse button. Tap to click at the pointer. Left and Right buttons click without moving it. Drag holds the left button while you swipe; tap Drag again to release. Scroll arrows move the remote page. Two-finger drags scroll vertically or horizontally with natural touch direction. Pinch to zoom from 100% to 400%; the view follows the pointer when it reaches an edge. A percentage button appears on the right above 100%; tap it to reset the view. Starting a two-finger gesture releases a latched drag.
@@ -26,7 +26,7 @@ This table compares the current implementation with the GLKVM console. "Implemen
 | --- | --- | --- |
 | Saved connections | Peer list and Settings | Implemented as a separate GL.iNet client list |
 | Direct LAN / Tailscale connection | Direct remote sessions | Implemented using the KVM origin; VPN must already be connected |
-| Password login and Q device approval | Login dialogs | Implemented against GLKVM auth endpoints |
+| Password login and Q device approval | Login dialogs | Implemented against GLKVM auth endpoints; optional per-client password storage in iOS Keychain |
 | TLS trust | Connection trust UI | Per-client certificate approval implemented |
 | Video | Remote display and scaling | H.264 Janus/WebRTC implemented; H.265, Direct mode and FEC/adaptive transports need separate support |
 | Mouse | Pointer and touch input | Touch trackpad, direct physical-mouse input, click, latched drag, right click and wheel implemented using absolute HID coordinates; relative HID mode, sensitivity, inversion and richer gestures remain |
@@ -75,7 +75,7 @@ With an iPhone simulator booted:
 scripts/ios/build.sh simulator
 ```
 
-Set `SIMULATOR_ID` to choose a particular booted simulator. The script builds, installs and launches `io.dafacility.rustdesk.glinet`. It uses one ARM64 architecture to avoid an incompatibility between Flutter 3.24's multi-architecture `lipo` invocation and Xcode 27.
+Set `SIMULATOR_ID` to choose a particular booted simulator. The script builds, installs and launches `io.dafacility.rustdesk.glinet`, using ad-hoc signing so Keychain is available. It uses one ARM64 architecture to avoid an incompatibility between Flutter 3.24's multi-architecture `lipo` invocation and Xcode 27.
 
 Build an unsigned physical-device app:
 
@@ -112,14 +112,16 @@ The focused test suite is `flutter test test/glinet_kvm_test.dart test/glinet_cl
 
 Verified on 2026-10-05:
 
-- Eleven focused tests pass, including trackpad swipes without clicks, taps at the current pointer, physical-mouse button release, two-finger scrolling in all four directions without clicks or zoom, pinch zoom/reset with scaled pointer motion, and equal control spacing in both orientations. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
+- Thirteen focused tests pass, including trackpad swipes without clicks, taps at the current pointer, physical-mouse button release, two-finger scrolling in all four directions without clicks or zoom, pinch zoom/reset with scaled pointer motion, and equal control spacing in both orientations. Password tests verify masked prefill, forgetting a saved password, and separation by client, origin and username. The sign-in regression test fails on the original implementation and passes with the fix. Analysis reports no issues in the KVM modules or tests; including the renamed Home page reports only its two pre-existing WillPopScope deprecation notices.
 - The full app builds and runs on an ARM64 iPhone simulator with iOS 27. The Connection screen retains RustDesk's ID field and peer tabs and adds GL.iNet clients.
 - A native simulator smoke test using the production KVM transport and renderer authenticated to a Comet Q over Tailscale and received 1920×1080 H.264 video.
 - The same native test sent absolute mouse movement and verified keyboard input by toggling the connected Mac's Caps Lock LED state, then restoring its original state. Text injection, clicks and drags have protocol coverage but still need interactive hardware acceptance testing.
 - A native simulator test reproduces a screen-awake plugin channel mismatch before login. Pinning the Dart interface to the native plugin's matching version fixes it. KVM sessions also tolerate screen-awake failures so they cannot block login or cleanup.
 - The native transport rejects the Comet Q's untrusted certificate, closes that connection, then authenticates and opens the input socket after pinning the verified certificate. Screen-awake enable and disable both succeed.
-- The Release iPhone app builds, signs and passes `codesign --verify --deep --strict`. Installation through Wireless Wire completed at 100%, and querying the phone confirms Access build 70 is installed with the pointer and full-screen layout update. The user confirmed that it opens on the physical phone. The bridge cannot start the iOS 27 debugserver, so opening the app remains a manual step. The user confirmed video and login work on build 69. The user confirmed that build 70 works well on the phone. Signed build 71 with the gesture update is packaged as `flutter/build/ios-device/Access-build71.ipa`, waiting for the phone to be connected for installation and interactive acceptance.
+- The Release iPhone app builds, signs and passes `codesign --verify --deep --strict`. Installation through Wireless Wire completed at 100%, and querying the phone confirms Access build 70 is installed with the pointer and full-screen layout update. The user confirmed that it opens on the physical phone. The bridge cannot start the iOS 27 debugserver, so opening the app remains a manual step. The user confirmed video and login work on build 69. The user confirmed that build 70 works well on the phone. Build 71 with the gesture update was installed and launched over direct USB.
 - A native test opens the production session page, logs into the Comet Q, receives video and confirms the session has no AppBar. Landscape screenshots verify the enlarged video and side controls. A further native test pinches the production session to 200%, verifies the percentage button, taps it, and confirms the zoom returns to 100%.
+- Signed Release build 72 includes Remember password and is packaged as `flutter/build/ios-device/Access-build72.ipa`. It passes signature verification and awaits the phone reconnecting through Wireless Wire.
+- A native Keychain test logs into the Comet Q through the production session page, saves the password, relaunches the app, verifies masked prefill and then unchecks Remember password to verify deletion.
 - Comet X hardware is not available for testing. Four-port switching remains unverified on hardware.
 
 The Device Hub accessibility interface timed out, so simulator screen rendering was inspected with `simctl` screenshots. The saved-client workflow has widget test coverage. Real-device tests do not yet cover every session control, background transition or reconnect.
@@ -135,4 +137,7 @@ The Device Hub accessibility interface timed out, so simulator screen rendering 
 - The libvpx overlay changes only ARM64 simulator builds because its upstream iOS target selects the physical-device SDK. Other libvpx builds retain the prior path.
 - New KVM state and protocol code live in `flutter/lib/glinet`. `kvm_session_page.dart` catches screen-awake failures and includes initial cleanup in its connection error handling, preventing the reported sign-in freeze. It also uses the new feature-local pointer and viewport widgets, manages the drag button, and hides/restores system overlays during KVM sessions. These changes implement the requested trackpad controls and full-screen layout without changing RustDesk remote sessions. `kvm_pointer.dart` now handles multi-touch scrolling and zoom while mapping physical and touch pointer input through the zoomed view. `kvm_session_page.dart` owns the zoom value and reset indicator. `kvm_session_viewport.dart` distributes rail controls evenly, including edge gaps. All three changes are limited to KVM interaction and layout. No RustDesk session protocol, server configuration or peer storage was replaced.
 
-Known limits include English-only new labels, manual reconnect, no saved passwords, no separate 2FA challenge UI beyond Comet Q touchscreen approval, no video transport fallback, and unverified Comet X hardware behavior. Use the device console for features not yet implemented.
+- The remember-password change adds a Keychain channel registration in `AppDelegate.swift` and compiles `KvmKeychain.swift` through `Runner.xcodeproj/project.pbxproj`. These iOS startup/build hooks are required to expose native Keychain access. `kvm_session_page.dart` loads saved credentials, provides the checkbox and saves only after successful authentication. `kvm_profile.dart` scopes credentials and removes them when a client identity changes or is deleted. The new `kvm_password_store.dart` is the Dart channel wrapper. Existing RustDesk peer-password storage is unchanged.
+- `scripts/ios/build.sh` now ad-hoc signs simulator builds so iOS Keychain access works. Device signing is unchanged.
+
+Known limits include English-only new labels, manual reconnect, no separate 2FA challenge UI beyond Comet Q touchscreen approval, no video transport fallback, and unverified Comet X hardware behavior. Use the device console for features not yet implemented.

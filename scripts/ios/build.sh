@@ -57,7 +57,7 @@ if [[ "$mode" == simulator ]]; then
   simulator_id="${SIMULATOR_ID:-$(xcrun simctl list devices booted -j | python3 -c 'import json,sys; print(next(d["udid"] for group in json.load(sys.stdin)["devices"].values() for d in group if d["state"] == "Booted" and "iPhone" in d["name"]))')}"
   xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Debug -sdk iphonesimulator \
     -destination "platform=iOS Simulator,id=$simulator_id" -derivedDataPath "$repo_root/flutter/build/ios-simulator" \
-    ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
+    ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=-
   app="$repo_root/flutter/build/ios-simulator/Build/Products/Debug-iphonesimulator/Runner.app"
   xcrun simctl install "$simulator_id" "$app"
   xcrun simctl launch "$simulator_id" io.dafacility.rustdesk.glinet

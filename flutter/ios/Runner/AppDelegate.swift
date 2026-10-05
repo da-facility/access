@@ -11,6 +11,7 @@ import Flutter
   ) -> Bool {
     flutterEngine.run()
     GeneratedPluginRegistrant.register(with: flutterEngine)
+    KvmKeychain.register(with: flutterEngine.binaryMessenger)
     dummyMethodToEnforceBundling();
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }
