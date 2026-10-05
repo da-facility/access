@@ -3,11 +3,15 @@ import Flutter
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
+  let flutterEngine = FlutterEngine(name: "rustdesk")
+
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    GeneratedPluginRegistrant.register(with: self)
+    flutterEngine.run()
+    GeneratedPluginRegistrant.register(with: flutterEngine)
+    KvmKeychain.register(with: flutterEngine.binaryMessenger)
     dummyMethodToEnforceBundling();
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
   }

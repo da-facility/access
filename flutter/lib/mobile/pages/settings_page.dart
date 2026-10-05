@@ -21,6 +21,7 @@ import '../widgets/deploy_dialog.dart';
 import '../widgets/dialog.dart';
 import 'home_page.dart';
 import 'scan_page.dart';
+import '../../glinet/kvm_clients_page.dart';
 
 class SettingsPage extends StatefulWidget implements PageShape {
   @override
@@ -748,6 +749,13 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ],
           ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
+          if (isIOS && !disabledSettings)
+            SettingsTile(
+              title: const Text('GL.iNet KVM clients'),
+              leading: const Icon(Icons.developer_board),
+              onPressed: (context) => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const KvmClientsPage())),
+            ),
           if (!disabledSettings && !_hideNetwork && !_hideServer)
             SettingsTile(
                 title: Text(translate('ID/Relay Server')),
