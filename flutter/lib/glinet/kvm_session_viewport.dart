@@ -17,11 +17,23 @@ class KvmSessionViewport extends StatelessWidget {
   Widget _controls(List<Widget> children, bool vertical) => Focus(
         canRequestFocus: false,
         descendantsAreFocusable: false,
-        child: SingleChildScrollView(
-          scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
-          child:
-              vertical ? Column(children: children) : Row(children: children),
-        ),
+        child: LayoutBuilder(builder: (context, constraints) {
+          return SingleChildScrollView(
+            scrollDirection: vertical ? Axis.vertical : Axis.horizontal,
+            child: ConstrainedBox(
+              constraints: vertical
+                  ? BoxConstraints(minHeight: constraints.maxHeight)
+                  : BoxConstraints(minWidth: constraints.maxWidth),
+              child: vertical
+                  ? Column(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: children)
+                  : Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: children),
+            ),
+          );
+        }),
       );
 
   @override

@@ -23,6 +23,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     with WidgetsBindingObserver {
   final _renderer = RTCVideoRenderer();
   final _focus = FocusNode();
+  final _zoom = ValueNotifier<double>(1);
   final _password = TextEditingController();
   late KvmProfile _profile = widget.profile;
   KvmTransport? _transport;
@@ -44,6 +45,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _zoom.addListener(_refreshZoom);
     _renderer.initialize().then((_) {
       if (mounted) setState(() => _initialized = true);
     }).catchError((Object error) {
@@ -61,6 +63,10 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _renderer.onResize = () {
       if (mounted) setState(() {});
     };
+  }
+
+  void _refreshZoom() {
+    if (mounted) setState(() {});
   }
 
   void _setStatus(String value) {
@@ -255,6 +261,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _disconnect().whenComplete(() => _renderer.dispose());
     _password.dispose();
     _focus.dispose();
+    _zoom.dispose();
     super.dispose();
   }
 
@@ -457,6 +464,19 @@ class _KvmSessionPageState extends State<KvmSessionPage>
             ),
         ],
         trailing: [
+          if (_zoom.value > 1)
+            SizedBox(
+                width: 48,
+                height: 48,
+                child: Tooltip(
+                    message: 'Reset zoom to 100%',
+                    child: TextButton(
+                      onPressed: () => _zoom.value = 1,
+                      style: TextButton.styleFrom(
+                          foregroundColor: Colors.lightBlueAccent,
+                          padding: EdgeInsets.zero),
+                      child: Text('${(_zoom.value * 100).round()}%'),
+                    ))),
           for (final entry
               in {'Esc': 'Escape', 'Tab': 'Tab', '↵': 'Enter'}.entries)
             SizedBox(
@@ -495,10 +515,14 @@ class _KvmSessionPageState extends State<KvmSessionPage>
           Positioned.fill(
               child: KvmPointer(
             enabled: ready,
+            zoom: _zoom,
             onFocus: _focus.requestFocus,
             onMove: (position) => _transport?.move(position.dx, position.dy),
             onButton: (button, down) => _transport?.button(button, down),
             onTap: () => _click('left'),
+            onMultitouch: () {
+              if (_dragging) _click('left');
+            },
             onScroll: (x, y) => _transport?.wheel(x, y),
             child: _initialized
                 ? RTCVideoView(_renderer,
@@ -561,7 +585,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                     child: const Text('Connect')),
                 const SizedBox(height: 16),
                 const Text(
-                    'Swipe the video to move the pointer. Tap to click at the pointer. Use Drag to hold the left button while moving, then tap Drag again to release. External keyboards and mice are supported.'),
+                    'Swipe with one finger to move the pointer; tap to click. Use two fingers to scroll and pinch to zoom. Drag holds the left button until you tap it again. External keyboards and mice are supported.'),
               ])),
       );
 }
