@@ -49,7 +49,7 @@ class _AddressBookState extends State<AddressBook> {
         } else {
           return Column(
             children: [
-              if (isIOS)
+              if (isIOS || isAndroid)
                 AccessBookLink(
                     key: ValueKey(gFFI.userModel.userName.value),
                     account: gFFI.userModel.userName.value),

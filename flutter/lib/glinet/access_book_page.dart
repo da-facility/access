@@ -206,7 +206,7 @@ class _AccessBookPageState extends State<AccessBookPage> {
                   const Padding(
                       padding: EdgeInsets.all(16),
                       child: Text(
-                          'These connections are saved to your account. KVM passwords stay in this device’s Keychain.')),
+                          'These connections are saved to your account. KVM passwords stay in this device’s secure storage.')),
                   if (_error != null)
                     Padding(
                         padding: const EdgeInsets.all(16),

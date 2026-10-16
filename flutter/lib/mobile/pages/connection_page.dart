@@ -88,7 +88,7 @@ class _ConnectionPageState extends State<ConnectionPage> {
           if (!bind.isCustomClient() && !isIOS)
             Obx(() => _buildUpdateUI(stateGlobal.updateUrl.value)),
           _buildRemoteIDTextField(),
-          if (isIOS) const KvmConnectionSection(),
+          if (isIOS || isAndroid) const KvmConnectionSection(),
         ])),
         SliverFillRemaining(
           hasScrollBody: true,

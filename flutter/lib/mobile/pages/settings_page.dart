@@ -749,7 +749,7 @@ class _SettingsState extends State<SettingsPage> with WidgetsBindingObserver {
             ],
           ),
         SettingsSection(title: Text(translate("Settings")), tiles: [
-          if (isIOS && !disabledSettings)
+          if ((isIOS || isAndroid) && !disabledSettings)
             SettingsTile(
               title: const Text('GL.iNet KVM clients'),
               leading: const Icon(Icons.developer_board),

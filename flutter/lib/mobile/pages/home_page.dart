@@ -150,7 +150,7 @@ class HomePageState extends State<HomePage> {
         ],
       );
     }
-    return Text(isIOS ? 'Da Facility Access' : bind.mainGetAppNameSync());
+    return Text((isIOS || isAndroid) ? 'Da Facility Access' : bind.mainGetAppNameSync());
   }
 }
 
