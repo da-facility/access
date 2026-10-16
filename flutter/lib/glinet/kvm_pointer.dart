@@ -1,9 +1,11 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
-/// A touch trackpad over the remote video. Physical mice use direct coordinates.
+/// Direct touch, trackpad, or local viewing gestures over the remote video.
 class KvmPointer extends StatefulWidget {
   final bool enabled;
+  final bool directTouch;
+  final bool viewOnly;
   final ValueNotifier<double> zoom;
   final ValueChanged<Offset> onMove;
   final void Function(String, bool) onButton;
@@ -16,6 +18,8 @@ class KvmPointer extends StatefulWidget {
   const KvmPointer(
       {super.key,
       required this.enabled,
+      this.directTouch = false,
+      this.viewOnly = false,
       required this.zoom,
       required this.onMove,
       required this.onButton,
@@ -50,7 +54,9 @@ class _KvmPointerState extends State<KvmPointer> {
       Offset(pan.dx.clamp(1 - _zoom, 0.0), pan.dy.clamp(1 - _zoom, 0.0));
 
   void _scaleUpdate(ScaleUpdateDetails details, Size size) {
-    if (!widget.enabled || details.pointerCount < 2) return;
+    if (!widget.enabled ||
+        (widget.directTouch && !widget.viewOnly) ||
+        (!widget.viewOnly && details.pointerCount < 2)) return;
     _pendingScale = details;
     if (_scaleFrameScheduled) return;
     _scaleFrameScheduled = true;
@@ -66,7 +72,7 @@ class _KvmPointerState extends State<KvmPointer> {
     final details = _pendingScale;
     _pendingScale = null;
     if (!widget.enabled || details == null) return;
-    _pinching |= (details.scale - 1).abs() > .04;
+    _pinching |= widget.viewOnly || (details.scale - 1).abs() > .04;
     if (_pinching) {
       setState(() {
         widget.zoom.value = (_startZoom * details.scale).clamp(1.0, 4.0);
@@ -90,7 +96,7 @@ class _KvmPointerState extends State<KvmPointer> {
   void _move(Offset position) {
     _cursor = Offset(position.dx.clamp(0.0, 1.0), position.dy.clamp(0.0, 1.0));
     widget.onMove(_cursor);
-    if (_zoom > 1) {
+    if (_zoom > 1 && !widget.directTouch) {
       final visible = _cursor * _zoom + _pan;
       final pan = _clampPan(_pan +
           Offset(visible.dx.clamp(.05, .95) - visible.dx,
@@ -123,7 +129,9 @@ class _KvmPointerState extends State<KvmPointer> {
       widget.zoom.addListener(_zoomChanged);
       _pan = _clampPan(_pan);
     }
-    if (!widget.enabled) {
+    if (!widget.enabled ||
+        widget.directTouch != oldWidget.directTouch ||
+        widget.viewOnly != oldWidget.viewOnly) {
       _release();
       _touches.clear();
       _pendingScale = null;
@@ -157,7 +165,7 @@ class _KvmPointerState extends State<KvmPointer> {
             child: Listener(
               behavior: HitTestBehavior.opaque,
               onPointerDown: (event) {
-                if (!widget.enabled) return;
+                if (!widget.enabled || widget.viewOnly) return;
                 if (event.kind != PointerDeviceKind.mouse) {
                   _touches.add(event.pointer);
                   if (_touches.length > 1) {
@@ -171,7 +179,8 @@ class _KvmPointerState extends State<KvmPointer> {
                 _pointer = event.pointer;
                 _travel = 0;
                 _started = event.timeStamp;
-                if (event.kind == PointerDeviceKind.mouse) {
+                if (event.kind == PointerDeviceKind.mouse ||
+                    widget.directTouch) {
                   _button = event.buttons & kSecondaryMouseButton != 0
                       ? 'right'
                       : 'left';
@@ -183,16 +192,21 @@ class _KvmPointerState extends State<KvmPointer> {
                 }
               },
               onPointerMove: (event) {
-                if (!widget.enabled || event.pointer != _pointer) return;
+                if (!widget.enabled ||
+                    widget.viewOnly ||
+                    event.pointer != _pointer) return;
                 _travel += event.localDelta.distance;
-                _move(event.kind == PointerDeviceKind.mouse
-                    ? (normalized(event.localPosition) - _pan) / _zoom
-                    : _cursor + normalized(event.localDelta) / _zoom);
+                _move(
+                    event.kind == PointerDeviceKind.mouse || widget.directTouch
+                        ? (normalized(event.localPosition) - _pan) / _zoom
+                        : _cursor + normalized(event.localDelta) / _zoom);
               },
               onPointerUp: (event) {
                 _touches.remove(event.pointer);
                 if (event.pointer != _pointer) return;
                 if (widget.enabled &&
+                    !widget.directTouch &&
+                    !widget.viewOnly &&
                     event.kind != PointerDeviceKind.mouse &&
                     _travel < 8 &&
                     event.timeStamp - _started <
@@ -206,12 +220,14 @@ class _KvmPointerState extends State<KvmPointer> {
                 if (event.pointer == _pointer) _release();
               },
               onPointerHover: (event) {
-                if (widget.enabled) {
+                if (widget.enabled && !widget.viewOnly) {
                   _move((normalized(event.localPosition) - _pan) / _zoom);
                 }
               },
               onPointerSignal: (event) {
-                if (widget.enabled && event is PointerScrollEvent) {
+                if (widget.enabled &&
+                    !widget.viewOnly &&
+                    event is PointerScrollEvent) {
                   widget.onScroll(-event.scrollDelta.dx.sign.toInt(),
                       -event.scrollDelta.dy.sign.toInt());
                 }

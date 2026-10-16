@@ -44,6 +44,13 @@ class KvmTransport {
     };
   }
 
+  /// Reopen sockets after iOS suspension without creating a new login session.
+  KvmTransport resumeSession() => KvmTransport(profile).._token = _token;
+
+  Future<void> checkSession() async {
+    await request('GET', '/api/auth/check');
+  }
+
   Uri endpoint(String path, [Map<String, String>? query]) =>
       profile.uri.replace(path: path, queryParameters: query);
 

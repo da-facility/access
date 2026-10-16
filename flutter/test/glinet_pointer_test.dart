@@ -69,7 +69,8 @@ void main() {
     expect(buttons, ['right:true', 'right:false']);
   });
 
-  testWidgets('landscape video fills the space between safe side controls',
+  testWidgets(
+      'video uses the whole screen and only floating controls stay inside safe areas',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(956, 440);
@@ -91,10 +92,13 @@ void main() {
           ]),
     )));
     final rect = tester.getRect(find.byKey(video));
-    expect(rect.width, 956 - 124 - 96);
+    expect(rect.height, 440);
     expect(rect.height, closeTo(rect.width * 9 / 16, .01));
     expect(rect.center, const Offset(478, 220));
-    expect(tester.getTopLeft(find.byType(BackButton)), const Offset(62, 196));
+    expect(find.byType(BackButton), findsNothing);
+    final button = tester.getRect(find.byTooltip('Open session controls'));
+    expect(button.right, lessThanOrEqualTo(956 - 62));
+    expect(button.bottom, lessThanOrEqualTo(440 - 21));
     expect(find.byType(AppBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -204,40 +208,121 @@ void main() {
         400);
   });
 
-  testWidgets(
-      'controls have equal gaps including the edges in both orientations',
+  testWidgets('floating menu and its drag never send touches to the remote',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
-    const keys = [
-      Key('first-control'),
-      Key('second-control'),
-      Key('third-control')
-    ];
+    var remoteTouches = 0;
+    var actions = 0;
     for (final size in [const Size(900, 400), const Size(400, 900)]) {
       tester.view.physicalSize = size;
       await tester.pumpWidget(MaterialApp(
           home: KvmSessionViewport(
-        aspectRatio: 16 / 9,
-        display: const SizedBox(),
+        key: ValueKey(size),
+        aspectRatio: size.width / size.height,
+        display: Listener(
+            onPointerDown: (_) => remoteTouches++,
+            behavior: HitTestBehavior.opaque,
+            child: const SizedBox.expand()),
         leading: [
-          for (final key in keys) SizedBox(key: key, width: 48, height: 48)
+          TextButton(onPressed: () => actions++, child: const Text('Portrait'))
         ],
         trailing: const [],
       )));
-      final vertical = size.width > size.height;
-      final positions = keys
-          .map((key) => tester.getTopLeft(find.byKey(key)))
-          .map((point) => vertical ? point.dy : point.dx)
-          .toList();
-      final extent = vertical ? size.height : size.width;
-      final gap = (extent - 3 * 48) / 4;
-      expect(positions[0], closeTo(gap, .01));
-      expect(positions[1] - positions[0] - 48, closeTo(gap, .01));
-      expect(positions[2] - positions[1] - 48, closeTo(gap, .01));
-      expect(extent - positions[2] - 48, closeTo(gap, .01));
+      await tester.tap(find.byTooltip('Open session controls'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Portrait'));
+      await tester.tapAt(const Offset(4, 4));
+      await tester.pumpAndSettle();
+      expect(find.text('Session controls'), findsNothing);
+      await tester.drag(
+          find.byTooltip('Open session controls'), const Offset(-150, -50));
+      await tester.pumpAndSettle();
+      expect(remoteTouches, 0);
+      await tester.tap(find.byTooltip('Open session controls'));
+      await tester.pumpAndSettle();
+      expect(find.text('Session controls'), findsOneWidget);
       expect(tester.takeException(), isNull);
+      await tester.tap(find.byTooltip('Close controls'));
+      await tester.pumpAndSettle();
     }
+    expect(actions, 2);
+  });
+
+  testWidgets(
+      'direct touch maps presses and drags through zoom and releases on cancel',
+      (tester) async {
+    final moves = <Offset>[];
+    final buttons = <String>[];
+    final zoom = ValueNotifier<double>(2);
+    await tester.pumpWidget(MaterialApp(
+        home: Center(
+            child: SizedBox(
+      width: 400,
+      height: 200,
+      child: KvmPointer(
+          enabled: true,
+          directTouch: true,
+          zoom: zoom,
+          onMove: moves.add,
+          onButton: (b, d) => buttons.add('$b:$d'),
+          onTap: () => fail('Direct input must not send a duplicate click'),
+          onScroll: (_, __) {},
+          onFocus: () {},
+          child: const SizedBox.expand()),
+    ))));
+    final origin = tester.getTopLeft(find.byType(KvmPointer));
+    final finger = await tester.startGesture(origin + const Offset(100, 50));
+    expect(moves.last, const Offset(.125, .125));
+    expect(buttons, ['left:true']);
+    await finger.moveBy(const Offset(80, 20));
+    expect(moves.last, const Offset(.225, .175));
+    await finger.up();
+    expect(buttons, ['left:true', 'left:false']);
+    final cancelled =
+        await tester.startGesture(origin + const Offset(200, 100));
+    await cancelled.cancel();
+    expect(buttons, ['left:true', 'left:false', 'left:true', 'left:false']);
+  });
+
+  testWidgets('view mode zooms and pans without sending remote input',
+      (tester) async {
+    final zoom = ValueNotifier<double>(1);
+    var remoteEvents = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: Center(
+            child: SizedBox(
+      width: 400,
+      height: 200,
+      child: KvmPointer(
+          enabled: true,
+          directTouch: true,
+          viewOnly: true,
+          zoom: zoom,
+          onMove: (_) => remoteEvents++,
+          onButton: (_, __) => remoteEvents++,
+          onTap: () => remoteEvents++,
+          onScroll: (_, __) => remoteEvents++,
+          onFocus: () {},
+          child: const SizedBox.expand()),
+    ))));
+    final center = tester.getCenter(find.byType(KvmPointer));
+    final first =
+        await tester.startGesture(center - const Offset(50, 0), pointer: 1);
+    final second =
+        await tester.startGesture(center + const Offset(50, 0), pointer: 2);
+    for (var i = 0; i < 5; i++) {
+      await first.moveBy(const Offset(-10, 0));
+      await second.moveBy(const Offset(10, 0));
+      await tester.pump();
+    }
+    await first.up();
+    await second.up();
+    await tester.pump();
+    expect(zoom.value, closeTo(2, .01));
+    await tester.drag(find.byType(KvmPointer), const Offset(40, 20));
+    await tester.pump();
+    expect(remoteEvents, 0);
   });
 }

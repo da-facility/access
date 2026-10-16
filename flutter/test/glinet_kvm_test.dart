@@ -56,10 +56,12 @@ void main() {
     final received = <Map<String, dynamic>>[];
     final released = Completer<void>();
     String? typed;
+    var logins = 0;
     final errors = <Object>[];
     final subscription = server.listen((req) async {
       try {
         if (req.uri.path == '/api/auth/login') {
+          logins++;
           final form = Uri.splitQueryString(await utf8.decodeStream(req));
           expect(form['user'], 'admin');
           expect(form['passwd'], 'test only');
@@ -102,7 +104,14 @@ void main() {
       transport.button('left', true);
       transport.key('ControlLeft', true);
       await transport.printText('Hello & world');
+      final resumed = transport.resumeSession();
       await transport.close();
+      await resumed.checkSession();
+      await resumed.connectInput();
+      await resumed.close();
+      expect(logins, 1,
+          reason:
+              'Resuming must reuse the session without a password or new approval');
       await released.future.timeout(const Duration(seconds: 2));
       expect(errors, isEmpty);
       expect(typed, 'Hello & world');

@@ -42,6 +42,10 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   String _status = 'Enter the KVM admin password to connect.';
   String? _error;
   bool _dragging = false;
+  bool _controlsOpen = false;
+  bool _directTouch = true;
+  bool _viewOnly = false;
+  bool _backgrounded = false;
   final _modifiers = <String>{};
   Timer? _frameTimeout;
   int? _activePort;
@@ -113,6 +117,11 @@ class _KvmSessionPageState extends State<KvmSessionPage>
 
   void _fail(String message) {
     if (!mounted) return;
+    if (_backgrounded && _connected) {
+      _connecting = false;
+      _status = 'Reconnecting when you return…';
+      return;
+    }
     setState(() {
       _error = message;
       _connecting = false;
@@ -125,29 +134,59 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   void _sessionUi(bool active) {
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
         overlays: active ? [] : SystemUiOverlay.values);
+    if (!active) SystemChrome.setPreferredOrientations([]);
   }
 
-  Future<void> _connect() async {
+  void _releaseInput() {
+    _transport?.releaseAll();
+    _dragging = false;
+    _modifiers.clear();
+  }
+
+  void _inputMode({required bool direct, bool viewOnly = false}) {
+    setState(() {
+      _releaseInput();
+      _directTouch = direct;
+      _viewOnly = viewOnly;
+    });
+  }
+
+  Future<void> _rotateViewer() async {
+    _releaseInput();
+    final portrait = MediaQuery.of(context).orientation == Orientation.portrait;
+    _zoom.value = 1;
+    await SystemChrome.setPreferredOrientations(portrait
+        ? [DeviceOrientation.landscapeLeft, DeviceOrientation.landscapeRight]
+        : [DeviceOrientation.portraitUp]);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _connect({KvmTransport? session}) async {
     if (_connecting ||
         !_initialized ||
         !_credentialsLoaded ||
         _updatingPassword ||
-        _password.text.isEmpty) return;
+        (session == null && _password.text.isEmpty)) return;
     setState(() {
       _connecting = true;
+      if (session == null) _controlsOpen = false;
       _error = null;
       _hasFrame = false;
-      _status = 'Signing in…';
+      _status = session == null ? 'Signing in…' : 'Resuming connection…';
     });
     _sessionUi(true);
     KvmTransport? transport;
     try {
       await _disconnect();
       if (!mounted) return;
-      transport = KvmTransport(_profile);
+      transport = session ?? KvmTransport(_profile);
       _transport = transport;
       try {
-        await transport.login(_password.text, onStatus: _setStatus);
+        if (session == null) {
+          await transport.login(_password.text, onStatus: _setStatus);
+        } else {
+          await transport.checkSession();
+        }
       } on KvmCertificateException catch (certificate) {
         await transport.close();
         if (!mounted) return;
@@ -183,10 +222,10 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         await transport.close();
         return;
       }
-      if (_rememberPassword) {
+      if (_rememberPassword && session == null) {
         await KvmPasswordStore.write(_profile.credentialKey, _password.text);
         if (!mounted || _transport != transport) return;
-      } else {
+      } else if (!_rememberPassword) {
         _password.clear();
       }
       _setStatus('Opening keyboard and mouse…');
@@ -297,8 +336,13 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       _dragging = false;
       _modifiers.clear();
     }
-    if (state == AppLifecycleState.paused && (_connected || _connecting)) {
-      _fail('Session paused. Connect again to resume.');
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      _backgrounded = true;
+    } else if (state == AppLifecycleState.resumed) {
+      final reconnect = _backgrounded && _connected && !_connecting;
+      _backgrounded = false;
+      if (reconnect) _connect(session: _transport?.resumeSession());
     }
   }
 
@@ -419,32 +463,25 @@ class _KvmSessionPageState extends State<KvmSessionPage>
             ? Colors.lightBlueAccent
             : Colors.white;
     return SizedBox(
-      width: 48,
-      height: 48,
-      child: caption == null
-          ? IconButton(
-              tooltip: label,
-              onPressed: action,
-              color: color,
-              disabledColor: Colors.white30,
-              icon: Icon(icon, size: 23),
-            )
-          : Tooltip(
-              message: label,
-              child: TextButton(
-                onPressed: action,
-                style: TextButton.styleFrom(
-                    foregroundColor: color,
-                    disabledForegroundColor: Colors.white30,
-                    backgroundColor: selected ? Colors.white12 : null,
-                    padding: EdgeInsets.zero),
-                child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, size: 20, color: color),
-                      Text(caption, style: const TextStyle(fontSize: 10)),
-                    ]),
-              )),
+      width: 88,
+      height: 64,
+      child: Tooltip(
+          message: label,
+          child: TextButton(
+            onPressed: action,
+            style: TextButton.styleFrom(
+                foregroundColor: color,
+                disabledForegroundColor: Colors.white30,
+                backgroundColor: selected ? Colors.white12 : null,
+                padding: EdgeInsets.zero),
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+              Icon(icon, size: 20, color: color),
+              Text(caption ?? label,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12)),
+            ]),
+          )),
     );
   }
 
@@ -467,7 +504,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         }
       },
       onKeyEvent: (_, event) {
-        if (!ready) return KeyEventResult.ignored;
+        if (!ready || _controlsOpen || _viewOnly) return KeyEventResult.ignored;
         final key = kvmKey(event.physicalKey);
         if (key == null) return KeyEventResult.ignored;
         _transport?.key(key, event is! KeyUpEvent);
@@ -475,8 +512,29 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       },
       child: KvmSessionViewport(
         aspectRatio: ratio,
+        onMenuChanged: (open) => setState(() {
+          if (open) _releaseInput();
+          _controlsOpen = open;
+          if (!open) _focus.requestFocus();
+        }),
         leading: [
-          _control('Back', Icons.arrow_back, () => Navigator.pop(context)),
+          _control(
+              'Direct touch', Icons.touch_app, () => _inputMode(direct: true),
+              selected: _directTouch && !_viewOnly),
+          _control('Touchpad', Icons.mouse, () => _inputMode(direct: false),
+              selected: !_directTouch && !_viewOnly),
+          _control('Zoom & pan', Icons.pinch,
+              () => _inputMode(direct: true, viewOnly: true),
+              selected: _viewOnly),
+          _control(
+              MediaQuery.of(context).orientation == Orientation.portrait
+                  ? 'Landscape'
+                  : 'Portrait',
+              Icons.screen_rotation,
+              _rotateViewer),
+          _control(
+              'Reset zoom to 100%', Icons.zoom_out_map, () => _zoom.value = 1,
+              caption: '${(_zoom.value * 100).round()}%'),
           _control('Keyboard', Icons.keyboard, ready ? _keyboard : null),
           _control(
               'Left click', Icons.mouse, ready ? () => _click('left') : null,
@@ -487,7 +545,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
           _control(
               _dragging ? 'Release drag' : 'Drag',
               Icons.pan_tool_alt,
-              ready
+              ready && !_directTouch && !_viewOnly
                   ? () {
                       setState(() => _dragging = !_dragging);
                       _transport?.button('left', _dragging);
@@ -503,7 +561,19 @@ class _KvmSessionPageState extends State<KvmSessionPage>
             PopupMenuButton<int>(
               tooltip: 'Select Comet X port',
               enabled: ready && !_switchingPort,
-              icon: const Icon(Icons.input, color: Colors.white),
+              child: SizedBox(
+                  width: 88,
+                  height: 64,
+                  child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.input, color: Colors.white),
+                        Text(
+                            _activePort == null
+                                ? 'Select port'
+                                : 'Port ${_activePort! + 1}',
+                            style: const TextStyle(color: Colors.white)),
+                      ])),
               onSelected: _switchPort,
               itemBuilder: (_) => [
                 for (var port = 0; port < 4; port++)
@@ -513,23 +583,15 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                       child: Text('Port ${port + 1}')),
               ],
             ),
+          _control('Disconnect', Icons.link_off, () => Navigator.pop(context)),
         ],
         trailing: [
-          if (_zoom.value > 1)
-            SizedBox(
-                width: 48,
-                height: 48,
-                child: Tooltip(
-                    message: 'Reset zoom to 100%',
-                    child: TextButton(
-                      onPressed: () => _zoom.value = 1,
-                      style: TextButton.styleFrom(
-                          foregroundColor: Colors.lightBlueAccent,
-                          padding: EdgeInsets.zero),
-                      child: Text('${(_zoom.value * 100).round()}%'),
-                    ))),
-          for (final entry
-              in {'Esc': 'Escape', 'Tab': 'Tab', '↵': 'Enter'}.entries)
+          for (final entry in {
+            'Esc': 'Escape',
+            'Tab': 'Tab',
+            'Enter': 'Enter',
+            'Delete': 'Backspace'
+          }.entries)
             SizedBox(
                 width: 48,
                 height: 48,
@@ -565,7 +627,9 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         display: Stack(children: [
           Positioned.fill(
               child: KvmPointer(
-            enabled: ready,
+            enabled: ready && !_controlsOpen,
+            directTouch: _directTouch,
+            viewOnly: _viewOnly,
             zoom: _zoom,
             onFocus: _focus.requestFocus,
             onMove: (position) => _transport?.move(position.dx, position.dy),
@@ -648,7 +712,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                     child: const Text('Connect')),
                 const SizedBox(height: 16),
                 const Text(
-                    'Swipe with one finger to move the pointer; tap to click. Use two fingers to scroll and pinch to zoom. Drag holds the left button until you tap it again. External keyboards and mice are supported.'),
+                    'Touch the remote screen to click or drag at that position. Open the floating controls for portrait mode, keyboard, touchpad, or Zoom & pan. Touchpad supports two-finger scrolling and pinch zoom. KVM input is mouse and keyboard, not native iPhone multitouch.'),
               ])),
       );
 }
