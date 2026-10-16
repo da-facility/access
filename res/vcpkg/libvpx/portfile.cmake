@@ -214,7 +214,15 @@ else()
             set(LIBVPX_TARGET "${LIBVPX_TARGET_ARCH}-darwin17-gcc") # enable latest CPU instructions for best performance and less CPU usage on MacOS
         endif()
     elseif(VCPKG_TARGET_IS_IOS)
-        if(VCPKG_TARGET_ARCHITECTURE STREQUAL arm)
+        if(VCPKG_OSX_SYSROOT STREQUAL "iphonesimulator" AND VCPKG_TARGET_ARCHITECTURE STREQUAL arm64)
+            # libvpx's arm64-darwin target hardcodes the physical iPhone SDK.
+            set(LIBVPX_TARGET "generic-gnu")
+            execute_process(COMMAND xcrun --sdk iphonesimulator --show-sdk-path
+                OUTPUT_VARIABLE SIMULATOR_SDK OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
+            set(ENV{CC} "${VCPKG_DETECTED_CMAKE_C_COMPILER} -target arm64-apple-ios15.0-simulator -isysroot ${SIMULATOR_SDK}")
+            set(ENV{CXX} "${VCPKG_DETECTED_CMAKE_CXX_COMPILER} -target arm64-apple-ios15.0-simulator -isysroot ${SIMULATOR_SDK}")
+            set(ENV{LD} "$ENV{CC}")
+        elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm)
             set(LIBVPX_TARGET "armv7-darwin-gcc")
         elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL arm64)
             set(LIBVPX_TARGET "arm64-darwin-gcc")
