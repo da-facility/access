@@ -3,7 +3,7 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "$0")/../.." && pwd)"
 mode="${1:-simulator}"
-case "$mode" in simulator|device|deploy|wireless-deploy) ;; *) echo 'Usage: build.sh [simulator|device|deploy|wireless-deploy]'; exit 2;; esac
+case "$mode" in simulator|device|deploy|wireless-deploy|ipa) ;; *) echo 'Usage: build.sh [simulator|device|deploy|wireless-deploy|ipa]'; exit 2;; esac
 export DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}"
 export PATH="$HOME/.cargo/bin:$PATH"
 tools_root="${IOS_TOOLS_ROOT:-$repo_root/../.toolchains}"
@@ -49,7 +49,7 @@ rustup target add --toolchain 1.81.0 "$target"
 cargo +1.81.0 build --locked --features flutter --release --target "$target" --lib
 cd "$repo_root/flutter"
 "$flutter" pub get
-"$flutter" build ios --config-only --no-codesign
+"$flutter" build ios --config-only --no-codesign ${BUILD_NUMBER:+--build-number="$BUILD_NUMBER"}
 cd ios
 pod install
 
@@ -67,7 +67,7 @@ elif [[ "$mode" == device ]]; then
     ARCHS=arm64 CODE_SIGNING_ALLOWED=NO
 else
   : "${DEVELOPMENT_TEAM:?Set DEVELOPMENT_TEAM to your Apple development team ID}"
-  if [[ "$mode" == wireless-deploy ]]; then
+  if [[ "$mode" == wireless-deploy || "$mode" == ipa ]]; then
     destination=generic/platform=iOS
   else
     : "${DEVICE_ID:?Set DEVICE_ID to the connected iPhone identifier from xcrun devicectl list devices}"
@@ -77,7 +77,15 @@ else
     -destination "$destination" -derivedDataPath "$repo_root/flutter/build/ios-device" \
     -allowProvisioningUpdates ARCHS=arm64 DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM" CODE_SIGN_STYLE=Automatic
   app="$repo_root/flutter/build/ios-device/Build/Products/Release-iphoneos/Runner.app"
-  if [[ "$mode" == wireless-deploy ]]; then
+  if [[ "$mode" == ipa ]]; then
+    package_dir="$(mktemp -d -t access-ipa)"
+    trap 'rm -rf "$package_dir"' EXIT
+    mkdir "$package_dir/Payload"
+    ditto --norsrc --noextattr "$app" "$package_dir/Payload/Runner.app"
+    ipa="$repo_root/flutter/build/ios-device/Access.ipa"
+    ditto -c -k --norsrc --noextattr --keepParent "$package_dir/Payload" "$ipa"
+    echo "Signed IPA: $ipa"
+  elif [[ "$mode" == wireless-deploy ]]; then
     wireless_wire="${WIRELESS_WIRE:-$HOME/.local/bin/wireless-wire}"
     "$wireless_wire" doctor --side mac --require-device
     package_dir="$(mktemp -d -t access-ipa)"

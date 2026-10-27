@@ -163,6 +163,18 @@ A refactor added to cover a corner case rarely converges. Each new counter, time
 * If the test diff is more than twice the fix, cut it back to the tests that pin the reported behavior. A state that needs long setup to reach is usually too rare to fix.
 * When the number of tests needed to describe the behavior keeps growing, the implementation is too complex: simplify it instead of adding tests.
 
+## Delivering a requested feature
+
+When a feature the user asked for in a prompt is built, deliver it in this order. Do not stop after the code change.
+
+1. **Test on the simulator.** Run the focused Flutter tests for the area you touched, then boot an iPhone simulator and run `scripts/ios/build.sh simulator`. Exercise the new feature in the running app and take a screenshot (`xcrun simctl io booted screenshot <file>`) to confirm it. Fix what fails before going on. If the feature needs hardware the simulator lacks (a KVM, a camera), test everything up to that point and say what remains unverified.
+2. **Commit and push.** Commit the feature on the current branch with a message describing what it does, then `git push origin <branch>`.
+3. **Build a signed IPA.** Read the latest Access version from Selfstore (`curl -s "$(cat ~/.config/selfstore/url)/api/apps/access"`) and use the next build number. Run `DEVELOPMENT_TEAM=<team> BUILD_NUMBER=<n> scripts/ios/build.sh ipa`, with the team taken from `TeamIdentifier` in `codesign -dv` of the previous published IPA. The result is `flutter/build/ios-device/Access.ipa`. Check it with `codesign --verify --deep --strict` and confirm `CFBundleVersion` is the new build number.
+4. **Publish to Selfstore.** Use the `selfstore-publish` skill: app `Access`, version `v<pubspec version>-b<build>` (e.g. `v1.5.0-b85`), the commit you just pushed, and the IPA. Include the Android APK (see `docs/access-android.md`) when the feature changes Android too.
+5. **Send the link.** Send the new version's Selfstore page with Pushover: `source ~/.config/pushover/credentials.bash && source ~/.config/pushover/notify.bash && pushover "Access v…" "<url from the publish output>"`, with one line on what changed.
+
+Report each step's outcome. If a step fails, stop there and say which one and why.
+
 ## Reviewing a PR
 
 * Review only what the diff introduces. Verify ownership with `gh pr diff` before reporting a finding — if the offending lines are untouched context, it is a pre-existing problem, not this PR's.
