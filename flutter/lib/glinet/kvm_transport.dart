@@ -31,6 +31,8 @@ class KvmTransport {
   bool _closed = false;
   final _keys = <String>{};
   final _buttons = <String>{};
+  Map<String, dynamic>? _pendingMove;
+  Timer? _moveTimer;
   final states = StreamController<Map<String, dynamic>>.broadcast();
 
   KvmTransport(this.profile) {
@@ -57,7 +59,8 @@ class KvmTransport {
   Future<Map<String, dynamic>> request(String method, String path,
       {Map<String, String>? form,
       Map<String, String>? query,
-      String? text}) async {
+      String? text,
+      Map<String, dynamic>? json}) async {
     if (_closed) throw const KvmException('The KVM connection is closed.');
     try {
       final req = await _http
@@ -71,6 +74,9 @@ class KvmTransport {
             'application', 'x-www-form-urlencoded',
             charset: 'utf-8');
         req.write(Uri(queryParameters: form).query);
+      } else if (json != null) {
+        req.headers.contentType = ContentType.json;
+        req.write(jsonEncode(json));
       } else if (text != null) {
         req.headers.contentType = ContentType.text;
         req.write(text);
@@ -194,10 +200,44 @@ class KvmTransport {
 
   static int coordinate(double fraction) =>
       ((fraction.clamp(0.0, 1.0) * 65535).round() - 32768).clamp(-32768, 32767);
-  void move(double x, double y) => send('mouse_move', {
-        'to': {'x': coordinate(x), 'y': coordinate(y)}
-      });
+
+  /// Touch delivers 120+ moves a second, faster than the KVM's USB mouse
+  /// reports drain; a failed report write makes kvmd drop its queued events,
+  /// including a pending button release. Send at most one move per interval,
+  /// as the web UI does.
+  void move(double x, double y) {
+    _pendingMove = {
+      'to': {'x': coordinate(x), 'y': coordinate(y)}
+    };
+    if (_moveTimer == null) _flushMove();
+  }
+
+  void _flushMove() {
+    _moveTimer?.cancel();
+    _moveTimer = null;
+    final pending = _pendingMove;
+    if (pending == null) return;
+    _pendingMove = null;
+    send('mouse_move', pending);
+    _moveTimer = Timer(const Duration(milliseconds: 20), _flushMove);
+  }
+
+  /// Relative pointer motion, for the KVM's single relative mouse output.
+  void moveBy(int dx, int dy) {
+    final deltas = <Map<String, int>>[];
+    while (dx != 0 || dy != 0) {
+      final x = dx.clamp(-127, 127), y = dy.clamp(-127, 127);
+      deltas.add({'x': x, 'y': y});
+      dx -= x;
+      dy -= y;
+    }
+    if (deltas.isNotEmpty) {
+      send('mouse_relative', {'delta': deltas, 'squash': true});
+    }
+  }
+
   void button(String button, bool down) {
+    _flushMove();
     if (down) {
       _buttons.add(button);
     } else {
@@ -237,6 +277,7 @@ class KvmTransport {
     releaseAll();
     _closed = true;
     _heartbeat?.cancel();
+    _moveTimer?.cancel();
     await _input?.close();
     _http.close(force: true);
     await states.close();

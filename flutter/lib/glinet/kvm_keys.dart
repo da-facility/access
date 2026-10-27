@@ -68,3 +68,44 @@ String? kvmKey(PhysicalKeyboardKey key) {
     231: 'MetaRight',
   }[code];
 }
+
+const _shiftedDigits = ')!@#\$%^&*(';
+const _symbols = {
+  ' ': ('Space', false),
+  '\n': ('Enter', false),
+  '\t': ('Tab', false),
+  '-': ('Minus', false),
+  '_': ('Minus', true),
+  '=': ('Equal', false),
+  '+': ('Equal', true),
+  '[': ('BracketLeft', false),
+  '{': ('BracketLeft', true),
+  ']': ('BracketRight', false),
+  '}': ('BracketRight', true),
+  '\\': ('Backslash', false),
+  '|': ('Backslash', true),
+  ';': ('Semicolon', false),
+  ':': ('Semicolon', true),
+  "'": ('Quote', false),
+  '"': ('Quote', true),
+  '`': ('Backquote', false),
+  '~': ('Backquote', true),
+  ',': ('Comma', false),
+  '<': ('Comma', true),
+  '.': ('Period', false),
+  '>': ('Period', true),
+  '/': ('Slash', false),
+  '?': ('Slash', true),
+};
+
+/// The US-layout key, and whether Shift is needed, that types [char].
+(String, bool)? kvmCharKey(String char) {
+  if (char.length != 1) return null;
+  final code = char.codeUnitAt(0);
+  if (code >= 0x61 && code <= 0x7a) return ('Key${char.toUpperCase()}', false);
+  if (code >= 0x41 && code <= 0x5a) return ('Key$char', true);
+  if (code >= 0x30 && code <= 0x39) return ('Digit$char', false);
+  final digit = _shiftedDigits.indexOf(char);
+  if (digit >= 0) return ('Digit$digit', true);
+  return _symbols[char];
+}

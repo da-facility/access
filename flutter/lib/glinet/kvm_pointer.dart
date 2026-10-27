@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/gestures.dart';
 import 'package:flutter/widgets.dart';
 
@@ -39,6 +41,8 @@ class _KvmPointerState extends State<KvmPointer> {
   String? _button;
   double _travel = 0;
   Duration _started = Duration.zero;
+  Timer? _pendingTap;
+  bool _tapDrag = false;
   final _touches = <int>{};
   double get _zoom => widget.zoom.value;
   Offset _pan = Offset.zero;
@@ -109,6 +113,7 @@ class _KvmPointerState extends State<KvmPointer> {
     if (_button != null) widget.onButton(_button!, false);
     _pointer = null;
     _button = null;
+    _tapDrag = false;
   }
 
   void _zoomChanged() {
@@ -133,6 +138,7 @@ class _KvmPointerState extends State<KvmPointer> {
         widget.directTouch != oldWidget.directTouch ||
         widget.viewOnly != oldWidget.viewOnly) {
       _release();
+      _pendingTap?.cancel();
       _touches.clear();
       _pendingScale = null;
     }
@@ -141,6 +147,7 @@ class _KvmPointerState extends State<KvmPointer> {
   @override
   void dispose() {
     widget.zoom.removeListener(_zoomChanged);
+    _pendingTap?.cancel();
     _release();
     super.dispose();
   }
@@ -189,6 +196,13 @@ class _KvmPointerState extends State<KvmPointer> {
                 } else {
                   // Sync without moving the zoomed view before a possible pinch.
                   widget.onMove(_cursor);
+                  // Tap, then touch and hold: drag like a laptop trackpad.
+                  if (_pendingTap?.isActive ?? false) {
+                    _pendingTap!.cancel();
+                    _tapDrag = true;
+                    _button = 'left';
+                    widget.onButton('left', true);
+                  }
                 }
               },
               onPointerMove: (event) {
@@ -204,16 +218,24 @@ class _KvmPointerState extends State<KvmPointer> {
               onPointerUp: (event) {
                 _touches.remove(event.pointer);
                 if (event.pointer != _pointer) return;
-                if (widget.enabled &&
+                final tapped = widget.enabled &&
                     !widget.directTouch &&
                     !widget.viewOnly &&
                     event.kind != PointerDeviceKind.mouse &&
                     _travel < 8 &&
                     event.timeStamp - _started <
-                        const Duration(milliseconds: 350)) {
-                  widget.onTap();
-                }
+                        const Duration(milliseconds: 350);
+                final doubleTap = tapped && _tapDrag;
                 _release();
+                if (doubleTap) {
+                  // The first tap's click was held back; this completes a double click.
+                  widget.onTap();
+                } else if (tapped) {
+                  // Hold the click back so a second touch can drag instead.
+                  _pendingTap = Timer(const Duration(milliseconds: 300), () {
+                    if (mounted) widget.onTap();
+                  });
+                }
               },
               onPointerCancel: (event) {
                 _touches.remove(event.pointer);

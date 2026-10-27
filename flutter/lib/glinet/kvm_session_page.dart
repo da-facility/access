@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import 'kvm_device.dart';
+import 'kvm_edid_presets.dart';
+import 'kvm_keyboard_bar.dart';
 import 'kvm_keys.dart';
 import 'kvm_profile.dart';
 import 'kvm_password_store.dart';
@@ -47,7 +51,22 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   bool _viewOnly = false;
   bool _backgrounded = false;
   final _modifiers = <String>{};
+  bool _keyboardOpen = false;
+  final _viewport = GlobalKey<KvmSessionViewportState>();
+  final _typeFocus = FocusNode();
   Timer? _frameTimeout;
+  Timer? _videoRetry;
+  int _videoAttempt = 0;
+  bool _noSignal = false;
+  Map<String, dynamic>? _deviceConfig;
+  String? _edid;
+  Map<String, dynamic>? _streamer;
+  bool _cropToDevice = true;
+  String? _mouseOutput;
+  List<String> _mouseOutputsAvailable = const [];
+  Offset? _lastRelative;
+  Offset _relativeRemainder = Offset.zero;
+  bool _applyingSetting = false;
   int? _activePort;
   bool _switchingPort = false;
 
@@ -66,7 +85,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       if (mounted) {
         setState(() {
           _hasFrame = true;
-          _status = 'Connected';
+          if (!_noSignal) _status = 'Connected';
         });
       }
       _frameTimeout?.cancel();
@@ -132,7 +151,9 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   }
 
   void _sessionUi(bool active) {
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.manual,
+    // Sticky: an edge swipe that reveals the system bars hides them again.
+    SystemChrome.setEnabledSystemUIMode(
+        active ? SystemUiMode.immersiveSticky : SystemUiMode.manual,
         overlays: active ? [] : SystemUiOverlay.values);
     if (!active) SystemChrome.setPreferredOrientations([]);
   }
@@ -172,6 +193,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       if (session == null) _controlsOpen = false;
       _error = null;
       _hasFrame = false;
+      _noSignal = false;
       _status = session == null ? 'Signing in…' : 'Resuming connection…';
     });
     _sessionUi(true);
@@ -235,29 +257,499 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       });
       await transport.connectInput();
       if (!mounted || _transport != transport) return;
-      _setStatus('Waiting for video…');
-      _video = KvmVideo(transport, _renderer, onError: (message) {
-        if (_transport == transport) _fail(message);
-      });
-      await _video!.start();
-      if (!mounted || _transport != transport) return;
+      // Input works without video, so a sleeping source can be woken by touch.
       setState(() {
         _connecting = false;
         _connected = true;
+        _status = 'Waiting for video…';
       });
       await _keepAwake(true);
       _focus.requestFocus();
-      if (!_hasFrame) {
-        _frameTimeout = Timer(const Duration(seconds: 25), () {
-          if (mounted && !_hasFrame) {
-            _fail(
-                'No video arrived. Check the USB-C or HDMI source and select H.264 WebRTC in the KVM console.');
-          }
-        });
-      }
+      _frameTimeout = Timer(const Duration(seconds: 10), () {
+        if (mounted && !_hasFrame && _transport == transport) {
+          _setStatus(
+              'No video yet. If the source screen is off, tap the screen or use Wake device. Otherwise check the USB-C or HDMI source and select H.264 WebRTC in the KVM console.');
+        }
+      });
+      _loadDeviceSettings(transport);
+      await _startVideo(transport);
     } catch (error) {
       if (mounted && _transport == transport) _fail(error.toString());
     }
+  }
+
+  Future<void> _startVideo(KvmTransport transport) async {
+    _videoRetry?.cancel();
+    final previous = _video;
+    _video = null;
+    await previous?.close();
+    if (!mounted || _transport != transport) return;
+    final attempt = ++_videoAttempt;
+    final video = KvmVideo(transport, _renderer,
+        onError: (message) => _videoLost(transport, attempt, message));
+    _video = video;
+    try {
+      await video.start();
+    } catch (error) {
+      _videoLost(transport, attempt, error.toString());
+    }
+  }
+
+  /// Video failures retry only the stream; keyboard and mouse stay connected.
+  void _videoLost(KvmTransport transport, int attempt, String message) {
+    if (!mounted ||
+        _transport != transport ||
+        attempt != _videoAttempt ||
+        _videoRetry?.isActive == true) return;
+    _setStatus('$message Retrying video. Touch and keys still work.');
+    _videoRetry = Timer(const Duration(seconds: 3), () {
+      if (mounted && _transport == transport && !_backgrounded) {
+        _startVideo(transport);
+      }
+    });
+  }
+
+  /// Apple devices wake with the same pointer routine as the KVM web UI.
+  Future<void> _wake() async {
+    final transport = _transport;
+    if (transport == null) return;
+    final config = _deviceConfig;
+    if (config != null &&
+        kvmDevicePreset(config).family == KvmDeviceFamily.apple) {
+      transport.move(.5, .5);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      transport.button('middle', true);
+      await Future<void>.delayed(const Duration(seconds: 1));
+      transport.button('middle', false);
+    } else {
+      transport.move(.5, .5);
+    }
+    // A sleeping iPhone ignores the pointer routine but wakes on a key press.
+    _tapKey('ShiftLeft');
+  }
+
+  Future<void> _loadMouseOutput(KvmTransport transport) async {
+    try {
+      final outputs = await KvmDeviceSettings(transport).mouseOutputs();
+      if (mounted && _transport == transport) {
+        setState(() {
+          _mouseOutput = outputs['active'] as String?;
+          _mouseOutputsAvailable = [
+            for (final output in outputs['available'] as List? ?? const [])
+              if (kvmMouseOutputs.containsKey(output)) output as String
+          ];
+        });
+      }
+    } catch (error) {
+      debugPrint('GLKVM could not read the mouse mode: $error');
+    }
+  }
+
+  Future<void> _pickMouseOutput() async {
+    final current = _mouseOutput;
+    final output = await _sheet<String>(
+        'Mouse mode',
+        (context) => [
+              for (final output in _mouseOutputsAvailable)
+                ListTile(
+                    title: Text(kvmMouseOutputs[output]!.$1),
+                    subtitle: Text(kvmMouseOutputs[output]!.$2),
+                    trailing:
+                        output == current ? const Icon(Icons.check) : null,
+                    onTap: () => Navigator.pop(context, output)),
+            ]);
+    if (output == null || output == current || !mounted) return;
+    await _applySetting((settings) async {
+      if (!await settings.setMouseOutput(output)) {
+        throw const KvmException('The KVM cannot switch to this mouse mode.');
+      }
+      final transport = _transport;
+      if (transport != null) await _loadMouseOutput(transport);
+    }, 'Mouse mode set to ${kvmMouseOutputs[output]!.$1}.');
+  }
+
+  /// The relative output moves by distance, so send the change in position.
+  void _moveRelative(Offset position, Size video) {
+    final last = _lastRelative;
+    _lastRelative = position;
+    if (last == null) return;
+    final scale = video.isEmpty ? const Size(1920, 1080) : video;
+    final delta = Offset((position.dx - last.dx) * scale.width,
+            (position.dy - last.dy) * scale.height) +
+        _relativeRemainder;
+    final dx = delta.dx.truncate(), dy = delta.dy.truncate();
+    _relativeRemainder = delta - Offset(dx.toDouble(), dy.toDouble());
+    _transport?.moveBy(dx, dy);
+  }
+
+  Future<void> _loadDeviceSettings(KvmTransport transport) async {
+    final settings = KvmDeviceSettings(transport);
+    try {
+      final config = await settings.config();
+      if (mounted && _transport == transport) {
+        setState(() => _deviceConfig = config);
+      }
+    } catch (error) {
+      debugPrint('GLKVM could not read device settings: $error');
+    }
+    try {
+      final edid = await settings.edid();
+      if (mounted && _transport == transport) setState(() => _edid = edid);
+    } catch (error) {
+      debugPrint('GLKVM could not read the EDID: $error');
+    }
+    await _loadMouseOutput(transport);
+    try {
+      final streamer = await settings.streamer();
+      if (mounted && _transport == transport) {
+        setState(() => _streamer = streamer);
+      }
+    } catch (error) {
+      debugPrint('GLKVM could not read the streamer settings: $error');
+    }
+  }
+
+  void _notify(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  Future<void> _applySetting(
+      Future<void> Function(KvmDeviceSettings) action, String done) async {
+    final transport = _transport;
+    if (transport == null || _applyingSetting) return;
+    _releaseInput();
+    setState(() => _applyingSetting = true);
+    try {
+      await action(KvmDeviceSettings(transport));
+      _notify(done);
+    } catch (error) {
+      _notify(error.toString());
+    } finally {
+      if (mounted) setState(() => _applyingSetting = false);
+    }
+  }
+
+  Future<T?> _sheet<T>(
+      String title, List<Widget> Function(BuildContext) items) async {
+    _releaseInput();
+    final result = await showModalBottomSheet<T>(
+        context: context,
+        isScrollControlled: true,
+        builder: (context) => SafeArea(
+            child: ConstrainedBox(
+                constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.height * .8),
+                child: ListView(shrinkWrap: true, children: [
+                  ListTile(
+                      title: Text(title,
+                          style: Theme.of(context).textTheme.titleMedium)),
+                  ...items(context),
+                ]))));
+    if (mounted) {
+      _sessionUi(true);
+      (_keyboardOpen ? _typeFocus : _focus).requestFocus();
+    }
+    return result;
+  }
+
+  Future<void> _pickDevice() async {
+    final config = _deviceConfig;
+    if (config == null) return;
+    final current = kvmDevicePreset(config);
+    final preset = await _sheet<KvmDevicePreset>('Remote device', (context) {
+      final items = <Widget>[];
+      KvmDeviceFamily? family;
+      for (final preset in kvmDevicePresets) {
+        if (preset.family != family) {
+          family = preset.family;
+          items.add(Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+              child: Text(
+                  switch (family) {
+                    KvmDeviceFamily.computer => 'Computer',
+                    KvmDeviceFamily.apple => 'iPhone/iPad',
+                    KvmDeviceFamily.android => 'Android phone/tablet',
+                  },
+                  style: Theme.of(context).textTheme.labelLarge)));
+        }
+        items.add(ListTile(
+            title: Text(preset.label),
+            subtitle: preset.custom
+                ? Text(_sizeLabel(kvmCustomSize(config, preset.key)) ??
+                    'Enter the screen resolution')
+                : null,
+            trailing:
+                preset.key == current.key ? const Icon(Icons.check) : null,
+            onTap: () => Navigator.pop(context, preset)));
+      }
+      return items;
+    });
+    if (preset == null || !mounted) return;
+    List<int>? customSize;
+    String? appleType;
+    if (preset.custom) {
+      final custom = await _customDevice(preset, config);
+      if (custom == null) return;
+      (customSize, appleType) = custom;
+    }
+    await _applySetting((settings) async {
+      final updated = await settings.setDevice(preset,
+          customSize: customSize, appleType: appleType);
+      if (mounted) setState(() => _deviceConfig = updated);
+      if (!await settings.setMouseOutput(preset.mouseOutput)) {
+        throw const KvmException(
+            'Device saved. Switching its mouse mode needs a KVM restart; change the mouse mode in the KVM web UI.');
+      }
+      final transport = _transport;
+      if (transport != null) await _loadMouseOutput(transport);
+    }, 'Remote device set to ${preset.label}.');
+  }
+
+  String? _sizeLabel(List<int>? size) =>
+      size == null ? null : '${size[0]} × ${size[1]}';
+
+  Future<(List<int>, String?)?> _customDevice(
+      KvmDevicePreset preset, Map<String, dynamic> config) async {
+    final saved = kvmCustomSize(config, preset.key);
+    final height = TextEditingController(text: saved?[0].toString() ?? '');
+    final width = TextEditingController(text: saved?[1].toString() ?? '');
+    var appleType = config['custom_apple_device_type'] as String? ?? 'iphone';
+    final result = await showDialog<(List<int>, String?)>(
+        context: context,
+        builder: (context) => StatefulBuilder(
+            builder: (context, update) => AlertDialog(
+                  title: const Text('Custom device model'),
+                  content: SingleChildScrollView(
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text(
+                        'Enter the screen resolution of the controlled device, for example iPhone 17: 2622 × 1206, Samsung S26: 2340 × 1080. The device must support video output over USB-C.'),
+                    if (preset.key == otherApple)
+                      DropdownButtonFormField<String>(
+                          value: appleType,
+                          decoration:
+                              const InputDecoration(labelText: 'Device type'),
+                          items: const [
+                            DropdownMenuItem(
+                                value: 'iphone', child: Text('iPhone')),
+                            DropdownMenuItem(
+                                value: 'ipad', child: Text('iPad')),
+                          ],
+                          onChanged: (value) =>
+                              update(() => appleType = value ?? appleType)),
+                    TextField(
+                        controller: height,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Resolution (height)')),
+                    TextField(
+                        controller: width,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                            labelText: 'Resolution (width)')),
+                  ])),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel')),
+                    TextButton(
+                        onPressed: () {
+                          final h = int.tryParse(height.text.trim());
+                          final w = int.tryParse(width.text.trim());
+                          if (h == null || w == null || h < 1 || w < 1) return;
+                          Navigator.pop(context, (
+                            [h, w],
+                            preset.key == otherApple ? appleType : null
+                          ));
+                        },
+                        child: const Text('Save')),
+                  ],
+                )));
+    height.dispose();
+    width.dispose();
+    return result;
+  }
+
+  Future<void> _pickResolution() async {
+    final edid = _edid;
+    if (edid == null) return;
+    final current = kvmCurrentEdid(_profile.model, edid);
+    final iphone = _iphone;
+    final choice = await _sheet<Object>(
+        'Resolution (EDID)',
+        (context) => [
+              const ListTile(
+                  dense: true,
+                  subtitle: Text(
+                      'If the picture does not update after changing the EDID, restart or reconnect the controlled device.')),
+              for (final preset in kvmEdidPresets(_profile.model))
+                ListTile(
+                    title: Text(preset.label),
+                    subtitle: iphone &&
+                            (preset.label.startsWith('1440x900') ||
+                                preset.label.startsWith('1920x1200'))
+                        ? const Text('Not supported for iPhone')
+                        : null,
+                    trailing: identical(preset, current)
+                        ? const Icon(Icons.check)
+                        : null,
+                    onTap: () => Navigator.pop(context, preset)),
+              ListTile(
+                  title: const Text('Custom EDID'),
+                  trailing: current == null ? const Icon(Icons.check) : null,
+                  onTap: () => Navigator.pop(context, 'custom')),
+            ]);
+    if (choice == null || !mounted) return;
+    String? hex;
+    if (choice is KvmEdidPreset) {
+      hex = choice.hex;
+    } else {
+      hex = await _customEdid(current == null ? edid : '');
+    }
+    if (hex == null || hex.isEmpty) return;
+    await _applySetting((settings) async {
+      await settings.setEdid(hex!);
+      final updated = await settings.edid();
+      if (mounted) setState(() => _edid = updated);
+    }, 'EDID applied.');
+  }
+
+  bool get _iphone {
+    final config = _deviceConfig;
+    return config != null &&
+        kvmDevicePreset(config).family == KvmDeviceFamily.apple &&
+        !kvmDevicePreset(config).key.startsWith('ipad');
+  }
+
+  int? get _bitrate => (_streamer?['params'] as Map?)?['h264_bitrate'] as int?;
+
+  String _resolutionCaption() {
+    final edid = _edid;
+    if (edid == null) return 'Quality';
+    final label = kvmCurrentEdid(_profile.model, edid)?.label;
+    final height = label == null
+        ? 'Custom'
+        : '${RegExp(r'x(\d+)/').firstMatch(label)?[1] ?? label}p';
+    final bitrate = _bitrate;
+    return bitrate == null
+        ? height
+        : '$height · ${(bitrate / 1000).toStringAsFixed(bitrate % 1000 == 0 ? 0 : 1)} Mb';
+  }
+
+  /// Resolution and H.264 bitrate sliders. A higher resolution gives a phone,
+  /// which mirrors into a strip of the frame, more pixels.
+  Future<void> _pickQuality() async {
+    final edid = _edid;
+    if (edid == null) return;
+    final steps = kvmResolutionSteps(_profile.model, iphone: _iphone);
+    final current = kvmCurrentEdid(_profile.model, edid);
+    var resolution = steps.indexWhere((step) => step.hex == current?.hex);
+    final limit = ((_streamer?['limits'] as Map?)?['h264_bitrate'] as Map?);
+    final maxMbps = ((limit?['max'] as int? ?? 20000) / 1000).floor();
+    var mbps = ((_bitrate ?? 2000) / 1000).clamp(1, maxMbps).toDouble();
+    final more = await _sheet<bool>(
+        'Video quality',
+        (context) => [
+              StatefulBuilder(
+                  builder: (context, update) =>
+                      Column(mainAxisSize: MainAxisSize.min, children: [
+                        ListTile(
+                            title: const Text('Resolution'),
+                            trailing: Text(resolution < 0
+                                ? (current?.label.split('/').first ?? 'Custom')
+                                : steps[resolution].label.split('/').first)),
+                        if (steps.length > 1)
+                          Slider(
+                              value: resolution < 0 ? 0 : resolution.toDouble(),
+                              max: steps.length - 1.0,
+                              divisions: steps.length - 1,
+                              label: resolution < 0
+                                  ? null
+                                  : steps[resolution].label.split('/').first,
+                              onChanged: (value) =>
+                                  update(() => resolution = value.round()),
+                              onChangeEnd: (value) {
+                                final step = steps[value.round()];
+                                if (step.hex == current?.hex) return;
+                                _applySetting((settings) async {
+                                  await settings.setEdid(step.hex);
+                                  final updated = await settings.edid();
+                                  if (mounted) setState(() => _edid = updated);
+                                }, 'Resolution set to ${step.label.split('/').first}. If the picture does not change, reconnect the controlled device.');
+                              }),
+                        if (_bitrate != null) ...[
+                          ListTile(
+                              title: const Text('Bitrate'),
+                              trailing: Text('${mbps.round()} Mbps')),
+                          Slider(
+                              value: mbps,
+                              min: 1,
+                              max: maxMbps.toDouble(),
+                              divisions: maxMbps > 1 ? maxMbps - 1 : null,
+                              label: '${mbps.round()} Mbps',
+                              onChanged: (value) =>
+                                  update(() => mbps = value.roundToDouble()),
+                              onChangeEnd: (value) {
+                                final kbps = value.round() * 1000;
+                                _applySetting((settings) async {
+                                  await settings.setBitrate(kbps);
+                                  final streamer = await settings.streamer();
+                                  if (mounted) {
+                                    setState(() => _streamer = streamer);
+                                  }
+                                }, 'Bitrate set to ${value.round()} Mbps.');
+                              }),
+                        ],
+                        ListTile(
+                            title: const Text('All resolutions (EDID)…'),
+                            trailing: const Icon(Icons.chevron_right),
+                            onTap: () => Navigator.pop(context, true)),
+                      ])),
+            ]);
+    if (more == true && mounted) await _pickResolution();
+  }
+
+  Future<String?> _customEdid(String initial) async {
+    final text = TextEditingController(text: initial);
+    final result = await showDialog<String>(
+        context: context,
+        builder: (context) => AlertDialog(
+              title: const Text('Custom EDID'),
+              content: TextField(
+                  controller: text,
+                  minLines: 4,
+                  maxLines: 10,
+                  autocorrect: false,
+                  enableSuggestions: false,
+                  style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  decoration: const InputDecoration(
+                      hintText: '128 or 256 bytes of EDID in hexadecimal')),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Cancel')),
+                TextButton(
+                    onPressed: () => Navigator.pop(context, text.text.trim()),
+                    child: const Text('Apply')),
+              ],
+            ));
+    text.dispose();
+    return result;
+  }
+
+  Future<void> _toggleOrientation() async {
+    final config = _deviceConfig;
+    if (config == null) return;
+    final next = kvmPortrait(config) ? 'landscape' : 'portrait';
+    await _applySetting((settings) async {
+      final updated = await settings.update({'mobile_orientation': next});
+      if (mounted) setState(() => _deviceConfig = updated);
+    },
+        next == 'portrait'
+            ? 'Remote device orientation set to portrait.'
+            : 'Remote device orientation set to landscape. Enable rotation lock on an iPhone or iPad.');
   }
 
   Future<void> _keepAwake(bool enabled) async {
@@ -280,14 +772,23 @@ class _KvmSessionPageState extends State<KvmSessionPage>
       final event = message['event'];
       if (event is Map &&
           event['streamer'] is Map &&
-          event['streamer']['source']?['online'] == false) {
-        _setStatus('No video signal. Check the KVM source cable.');
+          event['streamer']['source']?['online'] is bool) {
+        final online = event['streamer']['source']['online'] as bool;
+        if (!online && !_noSignal) {
+          _noSignal = true;
+          _setStatus(
+              'No video signal. The source may be asleep; tap the screen or use Wake device.');
+        } else if (online && _noSignal) {
+          _noSignal = false;
+          _setStatus(_hasFrame ? 'Connected' : 'Waiting for video…');
+        }
       }
     }
   }
 
   Future<void> _disconnect() async {
     _frameTimeout?.cancel();
+    _videoRetry?.cancel();
     _dragging = false;
     _modifiers.clear();
     final transport = _transport;
@@ -350,12 +851,14 @@ class _KvmSessionPageState extends State<KvmSessionPage>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _frameTimeout?.cancel();
+    _videoRetry?.cancel();
     _renderer.onFirstFrameRendered = null;
     _renderer.onResize = null;
     _sessionUi(false);
     _disconnect().whenComplete(() => _renderer.dispose());
     _password.dispose();
     _focus.dispose();
+    _typeFocus.dispose();
     _zoom.dispose();
     super.dispose();
   }
@@ -387,72 +890,118 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     _transport?.key(key, down);
   }
 
-  Future<void> _keyboard() async {
-    _transport?.releaseAll();
-    setState(() {
-      _modifiers.clear();
-      _dragging = false;
-    });
-    final text = TextEditingController();
+  void _keyboard() {
+    setState(() => _keyboardOpen = !_keyboardOpen);
+    if (!_keyboardOpen) _focus.requestFocus();
+  }
+
+  /// Modifiers from the keyboard bar apply to the next key only.
+  void _releaseModifiers() {
+    if (_modifiers.isEmpty) return;
+    for (final key in _modifiers) {
+      _transport?.key(key, false);
+    }
+    setState(_modifiers.clear);
+  }
+
+  /// Presses [keys] together, like a keyboard shortcut.
+  void _shortcut(List<String> keys) {
+    for (final key in keys) {
+      _transport?.key(key, true);
+    }
+    for (final key in keys.reversed) {
+      _transport?.key(key, false);
+    }
+  }
+
+  /// Wakes a locked phone, opens its passcode screen and shows a local
+  /// keypad: iOS hides its own keypad from the mirrored picture.
+  Future<void> _unlock() async {
+    _tapKey('ShiftLeft');
+    await Future<void>.delayed(const Duration(milliseconds: 700));
+    _tapKey('Enter');
+    if (!mounted) return;
+    var typed = 0;
     await showModalBottomSheet<void>(
         context: context,
-        isScrollControlled: true,
-        builder: (context) => StatefulBuilder(
-            builder: (context, update) => Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16,
-                      MediaQuery.of(context).viewInsets.bottom + 20),
-                  child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                            controller: text,
-                            autofocus: true,
-                            autocorrect: false,
-                            enableSuggestions: false,
-                            minLines: 1,
-                            maxLines: 4,
-                            decoration: const InputDecoration(
-                                labelText: 'Type text on the remote device')),
-                        const SizedBox(height: 12),
-                        ElevatedButton(
-                            onPressed: () async {
-                              final value = text.text;
-                              if (value.isEmpty) return;
-                              try {
-                                await _transport?.printText(value);
-                                text.clear();
-                              } catch (error) {
-                                if (context.mounted) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                          content: Text(error.toString())));
-                                }
-                              }
-                            },
-                            child: const Text('Send text')),
-                        Wrap(alignment: WrapAlignment.center, children: [
-                          for (final entry in {
-                            'Esc': 'Escape',
-                            'Tab': 'Tab',
-                            '⌫': 'Backspace',
-                            'Enter': 'Enter',
-                            '↑': 'ArrowUp',
-                            '←': 'ArrowLeft',
-                            '↓': 'ArrowDown',
-                            '→': 'ArrowRight'
-                          }.entries)
-                            TextButton(
-                                onPressed: () => _tapKey(entry.value),
-                                child: Text(entry.key)),
+        builder: (context) => StatefulBuilder(builder: (context, update) {
+              Widget key(String label, VoidCallback onPressed,
+                      {IconData? icon}) =>
+                  Expanded(
+                      child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: SizedBox(
+                              height: 56,
+                              child: OutlinedButton(
+                                  onPressed: onPressed,
+                                  child: icon == null
+                                      ? Text(label,
+                                          style: const TextStyle(fontSize: 24))
+                                      : Icon(icon, semanticLabel: label)))));
+              Widget digit(int value) => key('$value', () {
+                    _tapKey('Digit$value');
+                    update(() => typed++);
+                  });
+              return SafeArea(
+                  child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        const Text(
+                            'Each digit is typed on the device as you tap it. The phone does not show its own keypad in the mirrored picture.',
+                            textAlign: TextAlign.center),
+                        const SizedBox(height: 8),
+                        Text(typed == 0 ? ' ' : '•' * typed,
+                            style: const TextStyle(
+                                fontSize: 24, letterSpacing: 6)),
+                        for (final row in const [
+                          [1, 2, 3],
+                          [4, 5, 6],
+                          [7, 8, 9]
+                        ])
+                          Row(children: [
+                            for (final value in row) digit(value)
+                          ]),
+                        Row(children: [
+                          key('Show passcode screen', () {
+                            _tapKey('ShiftLeft');
+                            _tapKey('Enter');
+                            update(() => typed = 0);
+                          }, icon: Icons.refresh),
+                          digit(0),
+                          key('Delete', () {
+                            _tapKey('Backspace');
+                            update(() => typed = math.max(0, typed - 1));
+                          }, icon: Icons.backspace_outlined),
                         ]),
-                      ]),
-                )));
-    text.dispose();
-    if (mounted) {
-      _sessionUi(true);
-      _focus.requestFocus();
+                        Row(children: [
+                          key('Enter', () {
+                            _tapKey('Enter');
+                            update(() => typed = 0);
+                          }, icon: Icons.keyboard_return),
+                        ]),
+                      ])));
+            }));
+    if (mounted) _focus.requestFocus();
+  }
+
+  void _typeKey(String key) {
+    _tapKey(key);
+    _releaseModifiers();
+  }
+
+  void _typeChar(String char) {
+    final key = kvmCharKey(char);
+    if (key == null) {
+      _transport?.printText(char).catchError((Object error) {
+        _notify(error.toString());
+      });
+      return;
     }
+    final shift = key.$2 && !_modifiers.contains('ShiftLeft');
+    if (shift) _transport?.key('ShiftLeft', true);
+    _tapKey(key.$1);
+    if (shift) _transport?.key('ShiftLeft', false);
+    _releaseModifiers();
   }
 
   Widget _control(String label, IconData icon, VoidCallback? action,
@@ -485,11 +1034,33 @@ class _KvmSessionPageState extends State<KvmSessionPage>
     );
   }
 
+  /// Shows only [crop] of [video], scaled to fill the available space.
+  Widget _cropped(Widget video, Rect? crop) {
+    if (crop == null) return video;
+    return ClipRect(child: LayoutBuilder(builder: (context, box) {
+      final width = box.maxWidth / crop.width;
+      final height = box.maxHeight / crop.height;
+      return Stack(children: [
+        Positioned(
+            left: -crop.left * width,
+            top: -crop.top * height,
+            width: width,
+            height: height,
+            child: video),
+      ]);
+    }));
+  }
+
   Widget _session() {
-    final ready = _connected && _hasFrame;
-    final ratio = _renderer.videoWidth > 0 && _renderer.videoHeight > 0
-        ? _renderer.videoWidth / _renderer.videoHeight
-        : 16 / 9;
+    // Input does not depend on video, so a sleeping source can still be woken.
+    final ready = _connected;
+    final video =
+        Size(_renderer.videoWidth.toDouble(), _renderer.videoHeight.toDouble());
+    final deviceRect = kvmDeviceRect(_deviceConfig, video);
+    final crop = _cropToDevice ? deviceRect : null;
+    final frameRatio = video.isEmpty ? 16 / 9 : video.width / video.height;
+    final ratio =
+        crop == null ? frameRatio : frameRatio * crop.width / crop.height;
     return Focus(
       focusNode: _focus,
       onFocusChange: (focused) {
@@ -511,11 +1082,25 @@ class _KvmSessionPageState extends State<KvmSessionPage>
         return KeyEventResult.handled;
       },
       child: KvmSessionViewport(
+        key: _viewport,
         aspectRatio: ratio,
+        actions: [
+          KvmEdgeAction('Keyboard', Icons.keyboard, ready ? _keyboard : null,
+              selected: _keyboardOpen),
+          KvmEdgeAction('Home', Icons.home_outlined,
+              ready ? () => _shortcut(['MetaLeft', 'KeyH']) : null),
+          KvmEdgeAction('App switcher', Icons.view_carousel_outlined,
+              ready ? () => _shortcut(['MetaLeft', 'Tab']) : null),
+          KvmEdgeAction('Spotlight', Icons.search,
+              ready ? () => _shortcut(['MetaLeft', 'Space']) : null),
+          KvmEdgeAction('Unlock', Icons.lock_open, ready ? _unlock : null),
+          KvmEdgeAction('Disconnect', Icons.close, () => Navigator.pop(context),
+              destructive: true),
+        ],
         onMenuChanged: (open) => setState(() {
           if (open) _releaseInput();
           _controlsOpen = open;
-          if (!open) _focus.requestFocus();
+          if (!open) (_keyboardOpen ? _typeFocus : _focus).requestFocus();
         }),
         leading: [
           _control(
@@ -535,7 +1120,40 @@ class _KvmSessionPageState extends State<KvmSessionPage>
           _control(
               'Reset zoom to 100%', Icons.zoom_out_map, () => _zoom.value = 1,
               caption: '${(_zoom.value * 100).round()}%'),
-          _control('Keyboard', Icons.keyboard, ready ? _keyboard : null),
+          if (_profile.model != 'RM4PE')
+            _control('Remote device', Icons.devices,
+                _deviceConfig != null && !_applyingSetting ? _pickDevice : null,
+                caption: 'Device'),
+          if (_profile.model != 'RM4PE' &&
+              _deviceConfig != null &&
+              kvmDevicePreset(_deviceConfig!).family !=
+                  KvmDeviceFamily.computer)
+            _control('Remote device orientation', Icons.stay_current_portrait,
+                _applyingSetting ? null : _toggleOrientation,
+                caption:
+                    kvmPortrait(_deviceConfig!) ? 'Portrait' : 'Landscape'),
+          _control('Video quality', Icons.hd,
+              _edid != null && !_applyingSetting ? _pickQuality : null,
+              caption: _resolutionCaption()),
+          if (deviceRect != null)
+            _control(
+                _cropToDevice ? 'Show full frame' : 'Crop to device screen',
+                Icons.crop,
+                () => setState(() {
+                      _cropToDevice = !_cropToDevice;
+                      _zoom.value = 1;
+                    }),
+                selected: _cropToDevice,
+                caption: 'Crop'),
+          if (_mouseOutputsAvailable.length > 1)
+            _control('Mouse mode', Icons.mouse_outlined,
+                _applyingSetting ? null : _pickMouseOutput,
+                caption: _mouseOutput == null
+                    ? 'Mouse'
+                    : kvmMouseOutputs[_mouseOutput]?.$1.split(',').first ??
+                        'Mouse'),
+          _control('Keyboard', Icons.keyboard, ready ? _keyboard : null,
+              selected: _keyboardOpen),
           _control(
               'Left click', Icons.mouse, ready ? () => _click('left') : null,
               caption: 'Left'),
@@ -631,8 +1249,20 @@ class _KvmSessionPageState extends State<KvmSessionPage>
             directTouch: _directTouch,
             viewOnly: _viewOnly,
             zoom: _zoom,
-            onFocus: _focus.requestFocus,
-            onMove: (position) => _transport?.move(position.dx, position.dy),
+            onFocus: () => (_keyboardOpen ? _typeFocus : _focus).requestFocus(),
+            onMove: (position) {
+              final framePosition = crop == null
+                  ? position
+                  : Offset(crop.left + position.dx * crop.width,
+                      crop.top + position.dy * crop.height);
+              if (_mouseOutput == 'usb_rel') {
+                _moveRelative(framePosition, video);
+                return;
+              }
+              final mapped =
+                  kvmDevicePosition(framePosition, _deviceConfig, video);
+              _transport?.move(mapped.dx, mapped.dy);
+            },
             onButton: (button, down) => _transport?.button(button, down),
             onTap: () => _click('left'),
             onMultitouch: () {
@@ -640,39 +1270,74 @@ class _KvmSessionPageState extends State<KvmSessionPage>
             },
             onScroll: (x, y) => _transport?.wheel(x, y),
             child: _initialized
-                ? RTCVideoView(_renderer,
-                    objectFit:
-                        RTCVideoViewObjectFit.RTCVideoViewObjectFitContain)
+                ? _cropped(
+                    RTCVideoView(_renderer,
+                        objectFit:
+                            RTCVideoViewObjectFit.RTCVideoViewObjectFitContain),
+                    crop)
                 : const SizedBox.shrink(),
           )),
-          if (!_hasFrame)
+          if (!_hasFrame || _noSignal)
             Center(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(_status, style: const TextStyle(color: Colors.white)),
-            ]))
-          else if (_status != 'Connected')
-            Align(
-                alignment: Alignment.topCenter,
-                child: Container(
-                    color: Colors.black87,
-                    padding: const EdgeInsets.all(8),
+                child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                if (!_connected) ...[
+                  const CircularProgressIndicator(),
+                  const SizedBox(height: 16),
+                ],
+                IgnorePointer(
                     child: Text(_status,
-                        style: const TextStyle(color: Colors.white)))),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.white))),
+                if (_connected) ...[
+                  const SizedBox(height: 12),
+                  OutlinedButton.icon(
+                      onPressed: _wake,
+                      icon: const Icon(Icons.power_settings_new),
+                      label: const Text('Wake device')),
+                ],
+              ]),
+            ))
+          else if (_status != 'Connected')
+            IgnorePointer(
+                child: Align(
+                    alignment: Alignment.topCenter,
+                    child: Container(
+                        color: Colors.black87,
+                        padding: const EdgeInsets.all(8),
+                        child: Text(_status,
+                            style: const TextStyle(color: Colors.white))))),
         ]),
       ),
     );
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
+  Widget build(BuildContext context) => PopScope(
+      canPop: !(_connected || _connecting),
+      // Back gestures come from the screen edges, like the shortcut arc.
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _viewport.currentState?.toggleActions();
+      },
+      child: Scaffold(
         backgroundColor: _connected || _connecting ? Colors.black : null,
         appBar: _connected || _connecting
             ? null
             : AppBar(title: Text(_profile.name)),
         body: _connected || _connecting
-            ? _session()
+            ? Column(children: [
+                Expanded(child: _session()),
+                if (_keyboardOpen && _connected)
+                  KvmKeyboardBar(
+                      focus: _typeFocus,
+                      modifiers: _modifiers,
+                      onType: _typeChar,
+                      onKey: _typeKey,
+                      onModifier: _modifier,
+                      onSendText: (text) async => _transport?.printText(text),
+                      onClose: _keyboard),
+              ])
             : SafeArea(
                 child: ListView(padding: const EdgeInsets.all(20), children: [
                 Text('${_profile.modelName} · ${_profile.address}',
@@ -712,7 +1377,7 @@ class _KvmSessionPageState extends State<KvmSessionPage>
                     child: const Text('Connect')),
                 const SizedBox(height: 16),
                 const Text(
-                    'Touch the remote screen to click or drag at that position. Open the floating controls for portrait mode, keyboard, touchpad, or Zoom & pan. Touchpad supports two-finger scrolling and pinch zoom. KVM input is mouse and keyboard, not native iPhone multitouch.'),
+                    'Touch the remote screen to click or drag at that position. Swipe in from either screen edge for shortcuts and the session controls: keyboard, Home, unlock, touchpad, or Zoom & pan. Touchpad supports two-finger scrolling and pinch zoom. KVM input is mouse and keyboard, not native iPhone multitouch.'),
               ])),
-      );
+      ));
 }

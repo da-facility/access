@@ -35,8 +35,70 @@ void main() {
     expect(buttons, isEmpty);
     expect(clicks, 0);
     await tester.tapAt(area.topLeft + const Offset(300, 150));
+    expect(clicks, 0);
+    await tester.pump(const Duration(milliseconds: 300));
     expect(moves.last, const Offset(.7, .6));
     expect(clicks, 1);
+  });
+
+  testWidgets('touchpad tap-tap-drag is one press and a double tap one double click',
+      (tester) async {
+    final buttons = <String>[];
+    var clicks = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: Center(
+            child: SizedBox(
+      width: 400,
+      height: 200,
+      child: KvmPointer(
+          enabled: true,
+          zoom: ValueNotifier<double>(1),
+          onMove: (_) {},
+          onButton: (button, down) => buttons.add('$button:$down'),
+          onTap: () => clicks++,
+          onScroll: (_, __) {},
+          onFocus: () {},
+          child: const ColoredBox(color: Colors.black)),
+    ))));
+    final area = tester.getRect(find.byType(KvmPointer));
+    await tester.tapAt(area.center);
+    await tester.pump(const Duration(milliseconds: 100));
+    final finger = await tester.startGesture(area.center);
+    expect(buttons, ['left:true']);
+    await finger.moveBy(const Offset(60, 0));
+    await finger.up();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(buttons, ['left:true', 'left:false']);
+    expect(clicks, 0);
+    buttons.clear();
+    await tester.tapAt(area.center);
+    await tester.pump(const Duration(milliseconds: 100));
+    await tester.tapAt(area.center);
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(buttons, ['left:true', 'left:false']);
+    expect(clicks, 1);
+  });
+
+  testWidgets('the remote screen stays clear of the system gesture bar',
+      (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(400, 800);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    const video = Key('video');
+    await tester.pumpWidget(const MaterialApp(
+        home: MediaQuery(
+      data: MediaQueryData(
+          size: Size(400, 800),
+          systemGestureInsets: EdgeInsets.only(bottom: 48)),
+      child: KvmSessionViewport(
+          aspectRatio: .46,
+          display: ColoredBox(key: video, color: Colors.blue),
+          leading: [],
+          trailing: []),
+    )));
+    expect(
+        tester.getRect(find.byKey(video)).bottom, lessThanOrEqualTo(800 - 48));
   });
 
   testWidgets('a physical mouse keeps direct pointing and releases on cancel',
@@ -69,8 +131,7 @@ void main() {
     expect(buttons, ['right:true', 'right:false']);
   });
 
-  testWidgets(
-      'video uses the whole screen and only floating controls stay inside safe areas',
+  testWidgets('video uses the whole screen with only an edge handle over it',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(956, 440);
@@ -96,9 +157,7 @@ void main() {
     expect(rect.height, closeTo(rect.width * 9 / 16, .01));
     expect(rect.center, const Offset(478, 220));
     expect(find.byType(BackButton), findsNothing);
-    final button = tester.getRect(find.byTooltip('Open session controls'));
-    expect(button.right, lessThanOrEqualTo(956 - 62));
-    expect(button.bottom, lessThanOrEqualTo(440 - 21));
+    expect(find.byTooltip('Open session controls'), findsOneWidget);
     expect(find.byType(AppBar), findsNothing);
     expect(tester.takeException(), isNull);
   });
@@ -208,13 +267,14 @@ void main() {
         400);
   });
 
-  testWidgets('floating menu and its drag never send touches to the remote',
+  testWidgets('edge swipes open the shortcut arc without touching the remote',
       (tester) async {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetDevicePixelRatio);
     addTearDown(tester.view.resetPhysicalSize);
     var remoteTouches = 0;
-    var actions = 0;
+    var keyboard = 0;
+    var portrait = 0;
     for (final size in [const Size(900, 400), const Size(400, 900)]) {
       tester.view.physicalSize = size;
       await tester.pumpWidget(MaterialApp(
@@ -225,29 +285,38 @@ void main() {
             onPointerDown: (_) => remoteTouches++,
             behavior: HitTestBehavior.opaque,
             child: const SizedBox.expand()),
+        actions: [KvmEdgeAction('Keyboard', Icons.keyboard, () => keyboard++)],
         leading: [
-          TextButton(onPressed: () => actions++, child: const Text('Portrait'))
+          TextButton(onPressed: () => portrait++, child: const Text('Portrait'))
         ],
         trailing: const [],
       )));
-      await tester.tap(find.byTooltip('Open session controls'));
+      for (final edge in [
+        Offset(size.width - 2, size.height / 2),
+        Offset(2, size.height / 2)
+      ]) {
+        final inward = edge.dx < size.width / 2 ? 80.0 : -80.0;
+        await tester.dragFrom(edge, Offset(inward, 0));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Keyboard'));
+        await tester.pumpAndSettle();
+        expect(find.text('Keyboard'), findsNothing);
+      }
+      await tester.dragFrom(
+          Offset(size.width - 2, size.height / 2), const Offset(-80, 0));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('All controls'));
+      await tester.pumpAndSettle();
+      expect(find.text('Session controls'), findsOneWidget);
       await tester.tap(find.text('Portrait'));
       await tester.tapAt(const Offset(4, 4));
       await tester.pumpAndSettle();
       expect(find.text('Session controls'), findsNothing);
-      await tester.drag(
-          find.byTooltip('Open session controls'), const Offset(-150, -50));
-      await tester.pumpAndSettle();
-      expect(remoteTouches, 0);
-      await tester.tap(find.byTooltip('Open session controls'));
-      await tester.pumpAndSettle();
-      expect(find.text('Session controls'), findsOneWidget);
       expect(tester.takeException(), isNull);
-      await tester.tap(find.byTooltip('Close controls'));
-      await tester.pumpAndSettle();
     }
-    expect(actions, 2);
+    expect(remoteTouches, 0);
+    expect(keyboard, 4);
+    expect(portrait, 2);
   });
 
   testWidgets(
