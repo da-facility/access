@@ -1389,7 +1389,7 @@ pub fn make_display_changed_msg(
             VideoSource::Monitor => display_service::capture_cursor_embedded(),
             VideoSource::Camera => false,
         },
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         resolutions: Some(SupportedResolutions {
             resolutions: match source {
                 VideoSource::Monitor => {

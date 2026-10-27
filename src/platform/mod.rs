@@ -107,6 +107,22 @@ impl WakeLock {
     }
 }
 
+// iOS: the host runs in a ReplayKit broadcast extension, which iOS keeps
+// running while the broadcast lasts.
+#[cfg(target_os = "ios")]
+pub fn get_active_username() -> String {
+    "ios".into()
+}
+
+#[cfg(target_os = "ios")]
+#[derive(Default)]
+pub struct WakeLock;
+
+#[cfg(target_os = "ios")]
+pub fn get_wakelock(_display: bool) -> WakeLock {
+    WakeLock
+}
+
 #[cfg(not(target_os = "ios"))]
 pub fn get_wakelock(_display: bool) -> WakeLock {
     hbb_common::log::info!("new wakelock, require display on: {_display}");

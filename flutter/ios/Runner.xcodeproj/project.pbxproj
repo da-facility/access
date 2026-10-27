@@ -7,18 +7,53 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		AA722D3A73BC4FA787C41D10 /* KvmKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA722D3A73BC4FA787C41D11 /* KvmKeychain.swift */; };
-		D83C64591FAC463C83492525 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83C64591FAC463C83492526 /* SceneDelegate.swift */; };
+		034EE1106BE6E464289F7ACE /* ScreenShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B60F82A0143DBAE93B13614 /* ScreenShareStore.swift */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
+		3AA55BFC6AEA5140215ABDCF /* ScreenShareChannel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 394752B427433235CCBDF49A /* ScreenShareChannel.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
+		3D6B94A46FB0347636155F60 /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B68E0CAA4E19FCDB3E1AF8EE /* VideoToolbox.framework */; };
+		5883DA2184844EEA604F7B1A /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = AFD549434BEC7E8500B49711 /* Foundation.framework */; };
+		691651B595D8855A67190BF0 /* SystemConfiguration.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 96F6F0892AA87BD5A1DF713B /* SystemConfiguration.framework */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
+		8EC327B3DA83FF788BF1D247 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9D74BE3CFD7E20A620AA3259 /* CoreVideo.framework */; };
+		97142E614A463BBFFF6A8D4A /* ScreenShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = A9B1A3D846D7773232BDAEDA /* ScreenShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A9E7645422DBB158CE50A586 /* AudioToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CF6DDF2921A7C6461665DFBB /* AudioToolbox.framework */; };
+		AA722D3A73BC4FA787C41D10 /* KvmKeychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA722D3A73BC4FA787C41D11 /* KvmKeychain.swift */; };
 		C5678348E08E565F424B13A5 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 25E069BDBEF2890938537ABB /* Pods_Runner.framework */; };
+		C81B567FEF62B0899B4595E4 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4329E3852B3151E9AA6D3CA0 /* CoreMedia.framework */; };
+		D3DDFC58ABDA1E842CA30035 /* SampleHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 857C229608CCD015614F4F1D /* SampleHandler.swift */; };
+		D83C64591FAC463C83492525 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = D83C64591FAC463C83492526 /* SceneDelegate.swift */; };
+		DFCD979E57CC84DA9C7770FC /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6419975C058DE2A2A40C2142 /* ReplayKit.framework */; };
+		EE4B2D93D0F3D330EE68F153 /* ScreenShareStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4B60F82A0143DBAE93B13614 /* ScreenShareStore.swift */; };
+		F96617F4CFB5755FE1E29C03 /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DC711DC20C17607D9CB49CEB /* Security.framework */; };
+		F9AA562C360578A2FD4B236D /* ReplayKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 6419975C058DE2A2A40C2142 /* ReplayKit.framework */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		D03506BDA9F396E4A48EB3CB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 97C146E61CF9000F007C117D /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5BBDFEA60E187968DE4FD73A;
+			remoteInfo = ScreenShare;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXCopyFilesBuildPhase section */
+		3EE5C30C2C2A81DF322CE728 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				97142E614A463BBFFF6A8D4A /* ScreenShare.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		9705A1C41CF9048500538489 /* Embed Frameworks */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -32,19 +67,26 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		AA722D3A73BC4FA787C41D11 /* KvmKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KvmKeychain.swift; sourceTree = "<group>"; };
-		D83C64591FAC463C83492526 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
 		0A3A301029F021DD0095DDA5 /* liblibrustdesk.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = liblibrustdesk.a; path = "../../target/$(RUST_TARGET)/release/liblibrustdesk.a"; sourceTree = "<group>"; };
 		0A3A301329F0AB660095DDA5 /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		25E069BDBEF2890938537ABB /* Pods_Runner.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Runner.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		394752B427433235CCBDF49A /* ScreenShareChannel.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScreenShareChannel.swift; sourceTree = "<group>"; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		40E78CC6B4293A3E6DA85154 /* Pods-Runner.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug.xcconfig"; sourceTree = "<group>"; };
 		4151ACC476A12FDC49BC7860 /* Pods-Runner.profile.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.profile.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.profile.xcconfig"; sourceTree = "<group>"; };
+		4256EF5CDFDB6E7246A1435C /* ScreenShare.entitlements */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.entitlements; path = ScreenShare.entitlements; sourceTree = "<group>"; };
+		4329E3852B3151E9AA6D3CA0 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/CoreMedia.framework; sourceTree = DEVELOPER_DIR; };
+		4B60F82A0143DBAE93B13614 /* ScreenShareStore.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ScreenShareStore.swift; sourceTree = "<group>"; };
+		6419975C058DE2A2A40C2142 /* ReplayKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ReplayKit.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/ReplayKit.framework; sourceTree = DEVELOPER_DIR; };
 		74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Runner-Bridging-Header.h"; sourceTree = "<group>"; };
 		74858FAE1ED2DC5600515810 /* AppDelegate.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		7AFA3C8E1D35360C0083082E /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; name = Release.xcconfig; path = Flutter/Release.xcconfig; sourceTree = "<group>"; };
+		7DEB367489D4CEBDBDEAFA9E /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		857C229608CCD015614F4F1D /* SampleHandler.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SampleHandler.swift; sourceTree = "<group>"; };
+		964E4548DC90D39C33A3313D /* ScreenShare-Bridging-Header.h */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.c.h; path = "ScreenShare-Bridging-Header.h"; sourceTree = "<group>"; };
+		96F6F0892AA87BD5A1DF713B /* SystemConfiguration.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SystemConfiguration.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/SystemConfiguration.framework; sourceTree = DEVELOPER_DIR; };
 		9740EEB21CF90195004384FC /* Debug.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Debug.xcconfig; path = Flutter/Debug.xcconfig; sourceTree = "<group>"; };
 		9740EEB31CF90195004384FC /* Generated.xcconfig */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.xcconfig; name = Generated.xcconfig; path = Flutter/Generated.xcconfig; sourceTree = "<group>"; };
 		97C146EE1CF9000F007C117D /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -52,15 +94,39 @@
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
 		97C147021CF9000F007C117D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		9D74BE3CFD7E20A620AA3259 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/CoreVideo.framework; sourceTree = DEVELOPER_DIR; };
+		A9B1A3D846D7773232BDAEDA /* ScreenShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ScreenShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AA722D3A73BC4FA787C41D11 /* KvmKeychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KvmKeychain.swift; sourceTree = "<group>"; };
+		AFD549434BEC7E8500B49711 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		B68E0CAA4E19FCDB3E1AF8EE /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/VideoToolbox.framework; sourceTree = DEVELOPER_DIR; };
 		C66E40D850585BD073A0EF7D /* Pods-Runner.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.release.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.release.xcconfig"; sourceTree = "<group>"; };
+		CF6DDF2921A7C6461665DFBB /* AudioToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AudioToolbox.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/AudioToolbox.framework; sourceTree = DEVELOPER_DIR; };
+		D83C64591FAC463C83492526 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
+		DC711DC20C17607D9CB49CEB /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Security.framework; sourceTree = DEVELOPER_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		718572E54C8A4D086EA5B769 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5883DA2184844EEA604F7B1A /* Foundation.framework in Frameworks */,
+				F9AA562C360578A2FD4B236D /* ReplayKit.framework in Frameworks */,
+				3D6B94A46FB0347636155F60 /* VideoToolbox.framework in Frameworks */,
+				C81B567FEF62B0899B4595E4 /* CoreMedia.framework in Frameworks */,
+				8EC327B3DA83FF788BF1D247 /* CoreVideo.framework in Frameworks */,
+				A9E7645422DBB158CE50A586 /* AudioToolbox.framework in Frameworks */,
+				F96617F4CFB5755FE1E29C03 /* Security.framework in Frameworks */,
+				691651B595D8855A67190BF0 /* SystemConfiguration.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EB1CF9000F007C117D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 				C5678348E08E565F424B13A5 /* Pods_Runner.framework in Frameworks */,
+				DFCD979E57CC84DA9C7770FC /* ReplayKit.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -86,6 +152,7 @@
 				97C146EF1CF9000F007C117D /* Products */,
 				FC03317C0FF27D4E19FBA24E /* Pods */,
 				F213315C743C5EC601AD8123 /* Frameworks */,
+				CEDF94B90632145F0596B0E1 /* ScreenShare */,
 			);
 			sourceTree = "<group>";
 		};
@@ -93,6 +160,7 @@
 			isa = PBXGroup;
 			children = (
 				97C146EE1CF9000F007C117D /* Runner.app */,
+				A9B1A3D846D7773232BDAEDA /* ScreenShare.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -111,8 +179,22 @@
 				D83C64591FAC463C83492526 /* SceneDelegate.swift */,
 				AA722D3A73BC4FA787C41D11 /* KvmKeychain.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
+				394752B427433235CCBDF49A /* ScreenShareChannel.swift */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		CEDF94B90632145F0596B0E1 /* ScreenShare */ = {
+			isa = PBXGroup;
+			children = (
+				857C229608CCD015614F4F1D /* SampleHandler.swift */,
+				7DEB367489D4CEBDBDEAFA9E /* Info.plist */,
+				4256EF5CDFDB6E7246A1435C /* ScreenShare.entitlements */,
+				964E4548DC90D39C33A3313D /* ScreenShare-Bridging-Header.h */,
+				4B60F82A0143DBAE93B13614 /* ScreenShareStore.swift */,
+			);
+			name = ScreenShare;
+			path = ScreenShare;
 			sourceTree = "<group>";
 		};
 		F213315C743C5EC601AD8123 /* Frameworks */ = {
@@ -120,6 +202,7 @@
 			children = (
 				0A3A301029F021DD0095DDA5 /* liblibrustdesk.a */,
 				25E069BDBEF2890938537ABB /* Pods_Runner.framework */,
+				FE3F145BA5C8D0175AFB2F67 /* iOS */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -134,9 +217,41 @@
 			path = Pods;
 			sourceTree = "<group>";
 		};
+		FE3F145BA5C8D0175AFB2F67 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				AFD549434BEC7E8500B49711 /* Foundation.framework */,
+				6419975C058DE2A2A40C2142 /* ReplayKit.framework */,
+				B68E0CAA4E19FCDB3E1AF8EE /* VideoToolbox.framework */,
+				4329E3852B3151E9AA6D3CA0 /* CoreMedia.framework */,
+				9D74BE3CFD7E20A620AA3259 /* CoreVideo.framework */,
+				CF6DDF2921A7C6461665DFBB /* AudioToolbox.framework */,
+				DC711DC20C17607D9CB49CEB /* Security.framework */,
+				96F6F0892AA87BD5A1DF713B /* SystemConfiguration.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		5BBDFEA60E187968DE4FD73A /* ScreenShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 281AA8BC09D462D4B40EA3B0 /* Build configuration list for PBXNativeTarget "ScreenShare" */;
+			buildPhases = (
+				EFCC21E720098E03842E5876 /* Sources */,
+				718572E54C8A4D086EA5B769 /* Frameworks */,
+				2BC3A3DDB425B43F8C8FF6E2 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ScreenShare;
+			productName = ScreenShare;
+			productReference = A9B1A3D846D7773232BDAEDA /* ScreenShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		97C146ED1CF9000F007C117D /* Runner */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 97C147051CF9000F007C117D /* Build configuration list for PBXNativeTarget "Runner" */;
@@ -145,6 +260,7 @@
 				9740EEB61CF901F6004384FC /* Run Script */,
 				97C146EA1CF9000F007C117D /* Sources */,
 				97C146EB1CF9000F007C117D /* Frameworks */,
+				3EE5C30C2C2A81DF322CE728 /* Embed App Extensions */,
 				97C146EC1CF9000F007C117D /* Resources */,
 				9705A1C41CF9048500538489 /* Embed Frameworks */,
 				3B06AD1E1E4923F5004D2608 /* Thin Binary */,
@@ -153,6 +269,7 @@
 			buildRules = (
 			);
 			dependencies = (
+				00ABEBCE68E1FDB32A049186 /* PBXTargetDependency */,
 			);
 			name = Runner;
 			productName = Runner;
@@ -188,11 +305,19 @@
 			projectRoot = "";
 			targets = (
 				97C146ED1CF9000F007C117D /* Runner */,
+				5BBDFEA60E187968DE4FD73A /* ScreenShare */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		2BC3A3DDB425B43F8C8FF6E2 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		97C146EC1CF9000F007C117D /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -288,10 +413,30 @@
 				D83C64591FAC463C83492525 /* SceneDelegate.swift in Sources */,
 				AA722D3A73BC4FA787C41D10 /* KvmKeychain.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				3AA55BFC6AEA5140215ABDCF /* ScreenShareChannel.swift in Sources */,
+				034EE1106BE6E464289F7ACE /* ScreenShareStore.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EFCC21E720098E03842E5876 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D3DDFC58ABDA1E842CA30035 /* SampleHandler.swift in Sources */,
+				EE4B2D93D0F3D330EE68F153 /* ScreenShareStore.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		00ABEBCE68E1FDB32A049186 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ScreenShare;
+			target = 5BBDFEA60E187968DE4FD73A /* ScreenShare */;
+			targetProxy = D03506BDA9F396E4A48EB3CB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin PBXVariantGroup section */
 		97C146FA1CF9000F007C117D /* Main.storyboard */ = {
@@ -313,6 +458,49 @@
 /* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
+		0241F92C820A5CEACA65F25D /* Profile */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ScreenShare/ScreenShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ScreenShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/liblibrustdesk.a",
+					"-l\"c++\"",
+					"-l\"sqlite3\"",
+					"-l\"resolv\"",
+					"-l\"iconv\"",
+					"-l\"z\"",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet.ScreenShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "ScreenShare/ScreenShare-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Profile;
+		};
 		249021D3217E4FDB00AE95B9 /* Profile */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -373,8 +561,6 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = "";
-				RUST_TARGET = "aarch64-apple-ios";
-				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -446,12 +632,56 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				VERSIONING_SYSTEM = "apple-generic";
 			};
 			name = Profile;
+		};
+		3802334E91E658C654622D7D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ScreenShare/ScreenShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ScreenShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/liblibrustdesk.a",
+					"-l\"c++\"",
+					"-l\"sqlite3\"",
+					"-l\"resolv\"",
+					"-l\"iconv\"",
+					"-l\"z\"",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet.ScreenShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "ScreenShare/ScreenShare-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
 		};
 		97C147031CF9000F007C117D /* Debug */ = {
 			isa = XCBuildConfiguration;
@@ -571,8 +801,6 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = "";
-				RUST_TARGET = "aarch64-apple-ios";
-				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -644,6 +872,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
@@ -661,8 +891,6 @@
 				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				DEVELOPMENT_TEAM = "";
-				RUST_TARGET = "aarch64-apple-ios";
-				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -734,6 +962,8 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
 				STRIP_STYLE = "non-global";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
@@ -741,9 +971,62 @@
 			};
 			name = Release;
 		};
+		CFF49A424178951549AE35AB /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 9740EEB31CF90195004384FC /* Generated.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = ScreenShare/ScreenShare.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_BITCODE = NO;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = ScreenShare/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/",
+				);
+				OTHER_LDFLAGS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/../../target/$(RUST_TARGET)/release/liblibrustdesk.a",
+					"-l\"c++\"",
+					"-l\"sqlite3\"",
+					"-l\"resolv\"",
+					"-l\"iconv\"",
+					"-l\"z\"",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = io.dafacility.rustdesk.glinet.ScreenShare;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				RUST_TARGET = "aarch64-apple-ios";
+				"RUST_TARGET[sdk=iphonesimulator*]" = "aarch64-apple-ios-sim";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_OBJC_BRIDGING_HEADER = "ScreenShare/ScreenShare-Bridging-Header.h";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		281AA8BC09D462D4B40EA3B0 /* Build configuration list for PBXNativeTarget "ScreenShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CFF49A424178951549AE35AB /* Release */,
+				3802334E91E658C654622D7D /* Debug */,
+				0241F92C820A5CEACA65F25D /* Profile */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		97C146E91CF9000F007C117D /* Build configuration list for PBXProject "Runner" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

@@ -296,11 +296,14 @@ impl RendezvousMediator {
         let start_lan_listening = true;
         #[cfg(not(any(target_os = "android", target_os = "ios")))]
         let start_lan_listening = crate::platform::is_installed();
+        // iOS hosts are short-lived broadcast extensions reached via the ID server.
+        #[cfg(not(target_os = "ios"))]
         if start_lan_listening {
             std::thread::spawn(move || {
                 allow_err!(super::lan::start_listening());
             });
         }
+        #[cfg(not(target_os = "ios"))]
         scrap::codec::test_av1();
         *LAST_NOT_DEPLOYED_REGISTER.lock().await = None;
         loop {

@@ -23,7 +23,9 @@ use crate::{
     display_service, ipc, privacy_mode, video_service, VERSION,
 };
 #[cfg(any(target_os = "android", target_os = "ios"))]
-use crate::{common::DEVICE_NAME, flutter::connection_manager::start_channel};
+use crate::common::DEVICE_NAME;
+#[cfg(target_os = "android")]
+use crate::flutter::connection_manager::start_channel;
 use cidr_utils::cidr::IpCidr;
 #[cfg(target_os = "android")]
 use hbb_common::protobuf::EnumOrUnknown;
@@ -50,7 +52,7 @@ use base::{
     fs::{self, can_enable_overwrite_detection, JobType},
     message_proto::{option_message::BoolOption, permission_info::Permission},
 };
-#[cfg(any(target_os = "android", target_os = "ios"))]
+#[cfg(target_os = "android")]
 use scrap::android::{call_main_service_key_event, call_main_service_pointer_input};
 use scrap::camera;
 use serde_derive::Serialize;
@@ -1938,10 +1940,15 @@ impl Connection {
             ..Default::default()
         };
 
-        #[cfg(not(target_os = "android"))]
+        #[cfg(not(any(target_os = "android", target_os = "ios")))]
         {
             pi.hostname = crate::whoami_hostname();
             pi.platform = hbb_common::whoami::platform().to_string();
+        }
+        #[cfg(target_os = "ios")]
+        {
+            pi.hostname = DEVICE_NAME.lock().unwrap().clone();
+            pi.platform = "iOS".into();
         }
         #[cfg(target_os = "android")]
         {
@@ -3155,7 +3162,7 @@ impl Connection {
                     if self.is_authed_view_camera_conn() {
                         return true;
                     }
-                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    #[cfg(target_os = "android")]
                     if let Err(e) = call_main_service_pointer_input("mouse", me.mask, me.x, me.y) {
                         log::debug!("call_main_service_pointer_input fail:{}", e);
                     }
@@ -3194,7 +3201,7 @@ impl Connection {
                     if self.is_authed_view_camera_conn() {
                         return true;
                     }
-                    #[cfg(any(target_os = "android", target_os = "ios"))]
+                    #[cfg(target_os = "android")]
                     if let Err(e) = match pde.union {
                         Some(pointer_device_event::Union::TouchEvent(touch)) => match touch.union {
                             Some(touch_event::Union::PanStart(pan_start)) => {
