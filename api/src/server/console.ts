@@ -1,5 +1,6 @@
 /** Operations behind the admin console. Every call is made by a signed-in SSO admin. */
 import { randomUUID } from 'node:crypto'
+import QRCode from 'qrcode'
 import { policyCatalog } from '../policy-catalog'
 import { createUser, setPassword, validUsername, type User } from './accounts'
 import { audit } from './audit'
@@ -30,11 +31,25 @@ function serverInfo() {
   }
 }
 
-function overview() {
+/**
+ * The settings as RustDesk's share string: base64url of the JSON, reversed
+ * (ServerConfig.encode in the Flutter client). The client's paste button
+ * takes it as-is; its QR scanner wants it prefixed with "config=".
+ */
+export function shareString(info: ReturnType<typeof serverInfo>) {
+  const json = JSON.stringify({ host: info.idServer, relay: info.relayServer, api: info.apiServer, key: info.key })
+  return Buffer.from(json).toString('base64url').padEnd(Math.ceil(Buffer.byteLength(json) / 3) * 4, '=').split('').reverse().join('')
+}
+
+async function overview() {
   const t = now()
+  const server = serverInfo()
+  const share = shareString(server)
   const count = (sql: string, ...p: (string | number)[]) => one<{ n: number }>(sql, ...p)?.n ?? 0
   return {
-    server: serverInfo(),
+    server,
+    share,
+    qr: await QRCode.toString('config=' + share, { type: 'svg', margin: 1, errorCorrectionLevel: 'M' }),
     registration: getSetting('registration', 'off') === 'on',
     counts: {
       devices: count('SELECT count(*) AS n FROM devices'),
@@ -196,6 +211,7 @@ function userList() {
     email: u.email,
     note: u.note,
     isAdmin: !!u.is_admin,
+    sso: !!u.sso_subject,
     active: u.status === 1,
     createdAt: u.created_at,
     lastLoginAt: u.last_login_at,

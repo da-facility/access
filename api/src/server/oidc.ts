@@ -3,7 +3,7 @@ import { now, one, run } from './db'
 
 const issuer = () => process.env.RD_OIDC_ISSUER ?? 'https://sso.dafacility.io'
 const clientId = () => process.env.RD_OIDC_CLIENT_ID ?? 'rustdesk-console'
-const adminGroup = () => process.env.RD_OIDC_ADMIN_GROUP ?? 'admins'
+export const adminGroup = () => process.env.RD_OIDC_ADMIN_GROUP ?? 'admins'
 export const publicUrl = () => (process.env.RD_PUBLIC_URL ?? 'https://rd.dafacility.io').replace(/\/$/, '')
 export const callbackPath = '/admin/auth/callback'
 export const sessionCookie = 'rd_console'
@@ -37,23 +37,51 @@ export function readCookie(request: Request, name: string) {
   return undefined
 }
 
-export async function beginLogin(returnTo: string) {
-  const { authorization_endpoint } = await discover()
+export type SsoProfile = { sub: string; email?: string; name?: string; preferred_username?: string; groups?: string[] }
+
+export function pkce() {
   const verifier = b64url(randomBytes(32))
-  const state = b64url(randomBytes(16))
+  return { verifier, state: b64url(randomBytes(16)), challenge: b64url(createHash('sha256').update(verifier).digest()) }
+}
+
+/** Where to send the browser to sign in with SSO (authorization code + PKCE). */
+export async function authorizeUrl(client: string, redirectUri: string, state: string, challenge: string) {
+  const { authorization_endpoint } = await discover()
   const url = new URL(authorization_endpoint)
   url.search = new URLSearchParams({
     response_type: 'code',
-    client_id: clientId(),
-    redirect_uri: publicUrl() + callbackPath,
+    client_id: client,
+    redirect_uri: redirectUri,
     scope: 'openid profile email groups',
     state,
-    code_challenge: b64url(createHash('sha256').update(verifier).digest()),
+    code_challenge: challenge,
     code_challenge_method: 'S256',
   }).toString()
+  return url.toString()
+}
+
+/** Trades the callback's code for the signed-in person's SSO profile, or says why SSO refused. */
+export async function redeem(client: string, code: string, verifier: string, redirectUri: string): Promise<SsoProfile | string> {
+  const { token_endpoint, userinfo_endpoint } = await discover()
+  const tokenResponse = await fetch(token_endpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirectUri, client_id: client, code_verifier: verifier }),
+  })
+  if (!tokenResponse.ok) return 'SSO rejected the sign-in code.'
+  const { access_token } = (await tokenResponse.json()) as { access_token?: string }
+  if (!access_token) return 'SSO did not return an access token.'
+  const infoResponse = await fetch(userinfo_endpoint, { headers: { authorization: 'Bearer ' + access_token } })
+  if (!infoResponse.ok) return 'SSO did not return your profile.'
+  return (await infoResponse.json()) as SsoProfile
+}
+
+export async function beginLogin(returnTo: string) {
+  const { verifier, state, challenge } = pkce()
+  const location = await authorizeUrl(clientId(), publicUrl() + callbackPath, state, challenge)
   const safeReturn = returnTo.startsWith('/admin') ? returnTo : '/admin'
   const payload = Buffer.from(JSON.stringify({ state, verifier, returnTo: safeReturn })).toString('base64url')
-  return new Response(null, { status: 302, headers: { location: url.toString(), 'set-cookie': cookie(stateCookie, payload, 600) } })
+  return new Response(null, { status: 302, headers: { location, 'set-cookie': cookie(stateCookie, payload, 600) } })
 }
 
 export async function finishLogin(request: Request) {
@@ -70,24 +98,8 @@ export async function finishLogin(request: Request) {
   }
   if (url.searchParams.get('error')) return fail(url.searchParams.get('error_description') ?? url.searchParams.get('error')!, 403)
   if (!saved.state || url.searchParams.get('state') !== saved.state) return fail('The sign-in state did not match. Start again from the console.')
-  const { token_endpoint, userinfo_endpoint } = await discover()
-  const tokenResponse = await fetch(token_endpoint, {
-    method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code: url.searchParams.get('code') ?? '',
-      redirect_uri: publicUrl() + callbackPath,
-      client_id: clientId(),
-      code_verifier: saved.verifier,
-    }),
-  })
-  if (!tokenResponse.ok) return fail('SSO rejected the sign-in code.', 502)
-  const { access_token } = (await tokenResponse.json()) as { access_token?: string }
-  if (!access_token) return fail('SSO did not return an access token.', 502)
-  const infoResponse = await fetch(userinfo_endpoint, { headers: { authorization: 'Bearer ' + access_token } })
-  if (!infoResponse.ok) return fail('SSO did not return your profile.', 502)
-  const info = (await infoResponse.json()) as { sub: string; email?: string; name?: string; preferred_username?: string; groups?: string[] }
+  const info = await redeem(clientId(), url.searchParams.get('code') ?? '', saved.verifier, publicUrl() + callbackPath)
+  if (typeof info === 'string') return fail(info, 502)
   if (!info.groups?.includes(adminGroup())) return fail(`Your SSO account is not in the "${adminGroup()}" group.`, 403)
   const token = b64url(randomBytes(32))
   run('DELETE FROM console_sessions WHERE expires<=?', now())
@@ -128,7 +140,7 @@ export function clientIp(request: Request) {
   return request.headers.get('x-forwarded-for')?.split(',')[0].trim() || request.headers.get('x-real-ip') || ''
 }
 
-function page(title: string, message: string) {
+export function page(title: string, message: string, retry = '/admin/login') {
   const escape = (value: string) => value.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!)
-  return `<!doctype html><meta charset="utf-8"><title>${escape(title)}</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><h1>${escape(title)}</h1><p>${escape(message)}</p><p><a href="/admin/login">Try again</a></p></body>`
+  return `<!doctype html><meta charset="utf-8"><title>${escape(title)}</title><body style="font:16px system-ui;max-width:32rem;margin:4rem auto"><h1>${escape(title)}</h1><p>${escape(message)}</p>${retry ? `<p><a href="${retry}">Try again</a></p>` : ''}</body>`
 }

@@ -20,7 +20,9 @@ CREATE TABLE IF NOT EXISTS users (
   is_admin INTEGER NOT NULL DEFAULT 0,
   status INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
-  last_login_at INTEGER
+  last_login_at INTEGER,
+  -- The SSO account this user signs in with from the RustDesk app, if any.
+  sso_subject TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -195,6 +197,21 @@ CREATE TABLE IF NOT EXISTS audit (
 CREATE INDEX IF NOT EXISTS audit_category_at ON audit (category, at DESC);
 CREATE INDEX IF NOT EXISTS audit_device ON audit (device_id, at DESC);
 CREATE INDEX IF NOT EXISTS audit_conn ON audit (device_id, conn_id);
+
+-- RustDesk app sign-ins through SSO: the app polls until the browser finishes.
+CREATE TABLE IF NOT EXISTS oidc_requests (
+  code TEXT PRIMARY KEY,
+  state TEXT NOT NULL UNIQUE,
+  verifier TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  device_uuid TEXT NOT NULL,
+  device_info TEXT NOT NULL DEFAULT '{}',
+  ip TEXT NOT NULL DEFAULT '',
+  created_at INTEGER NOT NULL,
+  user_id TEXT REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT,
+  error TEXT
+);
 
 -- Admin console sessions (SSO via Pocket ID).
 CREATE TABLE IF NOT EXISTS console_sessions (

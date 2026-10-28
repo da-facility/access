@@ -14,6 +14,7 @@ export type User = {
   status: number
   created_at: number
   last_login_at: number | null
+  sso_subject: string | null
 }
 
 // Same parameters as the original Python server so hashes stay portable.

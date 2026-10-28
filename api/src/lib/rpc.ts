@@ -27,7 +27,7 @@ const consoleRpc = createServerFn({ method: "POST" })
     const { perform } = await import("../server/console");
     const { ApiError } = await import("../server/http");
     try {
-      return JSON.parse(JSON.stringify(perform({ admin, ip: clientIp(request) }, data.op, data.input) ?? null));
+      return JSON.parse(JSON.stringify((await perform({ admin, ip: clientIp(request) }, data.op, data.input)) ?? null));
     } catch (error) {
       if (error instanceof ApiError) throw new Error(error.message);
       throw error;

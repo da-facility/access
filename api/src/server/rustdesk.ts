@@ -10,6 +10,7 @@ import { checkPassword, createUser, digest, newToken, userPayload, type User } f
 import { audit } from './audit'
 import { all, getSetting, now, one, parse, run, transaction } from './db'
 import { ApiError, errorResponse, jsonResponse, optionalText, readJson, text, textResponse } from './http'
+import { finishAppSignIn, queryAppSignIn, ssoProvider, startAppSignIn } from './appsso'
 import { clientIp } from './oidc'
 import { effectivePolicy, payloadFor, stamp } from './policy'
 
@@ -40,7 +41,10 @@ async function dispatch(request: Request): Promise<unknown> {
   if (method === 'POST' && path === '/api/sysinfo') return sysinfo(await readJson(request), ip)
   if (method === 'POST' && path === '/api/heartbeat') return heartbeat(await readJson(request), ip)
   if (method === 'POST' && path.startsWith('/api/audit/')) return auditPost(path.slice('/api/audit/'.length), await readJson(request), ip)
-  if (method === 'GET' && path === '/api/login-options') return []
+  if (method === 'GET' && path === '/api/login-options') return [`oidc/${ssoProvider}`]
+  if (method === 'POST' && path === '/api/oidc/auth') return startAppSignIn(await readJson(request), ip)
+  if (method === 'GET' && path === '/api/oidc/auth-query') return queryAppSignIn(query)
+  if (method === 'GET' && path === '/api/oidc/callback') return finishAppSignIn(request)
   if (method === 'GET' && path === '/api/access/capabilities') return { version: 1, kvms: true, registration: registrationOpen() }
   if (method === 'POST' && path === '/api/login') return login(await readJson(request), ip)
   if (method === 'POST' && path === '/api/access/register') {
@@ -133,22 +137,8 @@ function login(body: any, ip: string) {
     throw new ApiError(403, 'This account is disabled.')
   }
   const token = newToken()
-  const t = now()
   const deviceId = optionalText(body.id, 'id', 64)
-  run('DELETE FROM sessions WHERE expires<=?', t)
-  run(
-    'INSERT INTO sessions (token, owner, expires, created_at, last_used_at, device_id, device_uuid, device_info, ip) VALUES (?,?,?,?,?,?,?,?,?)',
-    digest(token),
-    user!.id,
-    t + SESSION_DAYS * 86400,
-    t,
-    t,
-    deviceId,
-    optionalText(body.uuid, 'uuid', 256),
-    JSON.stringify(typeof body.deviceInfo === 'object' && body.deviceInfo ? body.deviceInfo : {}),
-    ip,
-  )
-  run('UPDATE users SET last_login_at=? WHERE id=?', t, user!.id)
+  openSession(user!, token, { deviceId, uuid: optionalText(body.uuid, 'uuid', 256), deviceInfo: JSON.stringify(typeof body.deviceInfo === 'object' && body.deviceInfo ? body.deviceInfo : {}), ip })
   const info = body.deviceInfo && typeof body.deviceInfo === 'object' ? body.deviceInfo : {}
   audit({
     category: 'login',
@@ -160,6 +150,25 @@ function login(body: any, ip: string) {
     data: { os: info.os, name: info.name },
   })
   return { type: 'access_token', access_token: token, user: userPayload(user!) }
+}
+
+/** Starts a RustDesk app session for a user on one device. */
+export function openSession(user: Pick<User, 'id'>, token: string, device: { deviceId: string; uuid: string; deviceInfo: string; ip: string }) {
+  const t = now()
+  run('DELETE FROM sessions WHERE expires<=?', t)
+  run(
+    'INSERT INTO sessions (token, owner, expires, created_at, last_used_at, device_id, device_uuid, device_info, ip) VALUES (?,?,?,?,?,?,?,?,?)',
+    digest(token),
+    user.id,
+    t + SESSION_DAYS * 86400,
+    t,
+    t,
+    device.deviceId,
+    device.uuid,
+    device.deviceInfo,
+    device.ip,
+  )
+  run('UPDATE users SET last_login_at=? WHERE id=?', t, user.id)
 }
 
 function authenticate(request: Request) {

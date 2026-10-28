@@ -32,7 +32,7 @@ function Users() {
   return (
     <Page
       title="Users"
-      description="Accounts people sign in with inside the RustDesk app (Settings → Account). Signing in syncs their address book and lists the devices they may reach. This console itself uses SSO."
+      description="Accounts people sign in with inside the RustDesk app (Settings → Account), with a password or with “Continue with Da Facility”. An SSO sign-in creates its account the first time. Signing in syncs the address book and lists the devices the person may reach."
       actions={<Button label="New user" icon={<Plus size={16} />} onClick={() => setEditing("new")} />}
     >
       {users.length === 0 ? (
@@ -66,6 +66,7 @@ function Users() {
               width: proportional(1.2),
               renderCell: (u) => (
                 <span style={{ display: "inline-flex", gap: 6 }}>
+                  {u.sso && <Badge variant="blue" label="SSO" />}
                   {u.isAdmin && <Badge variant="purple" label="RustDesk admin" />}
                   {!u.active && <Badge variant="error" label="Disabled" />}
                   {!u.isAdmin && u.active && <Muted>Member</Muted>}

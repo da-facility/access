@@ -49,14 +49,29 @@ function Overview() {
         <Stat label="Policies" value={counts.policies} />
       </Grid>
 
-      <Section title="Client settings" description="Enter these under Settings → Network → ID/Relay server in each RustDesk client. With the API server set, clients can sign in, sync address books, report to the audit log and receive policies.">
+      <Section
+        title="Client settings"
+        description="Set these in each RustDesk client under Settings → Network → ID/Relay server. Without the API server, a client can connect but won't sign in, sync, report or receive policies. iOS hides the relay field; it isn't needed there."
+      >
         <Card padding={4}>
-          <Stack gap={8}>
-            <Copyable label="ID server" value={server.idServer} />
-            <Copyable label="Relay server" value={server.relayServer} />
-            <Copyable label="API server" value={server.apiServer} />
-            <Copyable label="Key" value={server.key} />
-          </Stack>
+          <Row gap={24}>
+            <div style={{ flex: "1 1 420px", minWidth: 0 }}>
+              <Stack gap={8}>
+                <Copyable label="ID server" value={server.idServer} />
+                <Copyable label="Relay server" value={server.relayServer} />
+                <Copyable label="API server" value={server.apiServer} />
+                <Copyable label="Key" value={server.key} />
+                <Copyable label="All at once" value={data.share} />
+                <Muted>Copy “All at once”, then press the paste button at the top of the ID/Relay server dialog, or scan the code with the phone app's scanner.</Muted>
+              </Stack>
+            </div>
+            <div
+              aria-label="QR code with these settings"
+              role="img"
+              style={{ width: 168, height: 168, background: "#fff", borderRadius: 8, padding: 6, flexShrink: 0 }}
+              dangerouslySetInnerHTML={{ __html: data.qr }}
+            />
+          </Row>
         </Card>
       </Section>
 

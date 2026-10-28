@@ -128,3 +128,31 @@ describe('audit and enforcement', () => {
     expect(forBob.data).toEqual([])
   })
 })
+
+describe('app sign-in with SSO', () => {
+  test('login options offer the SSO provider', async () => {
+    expect((await api('GET', '/api/login-options')).json).toEqual(['oidc/Da Facility'])
+  })
+  test('the app keeps polling until the browser finishes, then gets a working token', async () => {
+    const { openSession } = await import('./rustdesk')
+    const alice = one<{ id: string }>("SELECT id FROM users WHERE name='alice'")!
+    run("INSERT INTO oidc_requests (code, state, verifier, device_id, device_uuid, created_at) VALUES ('c1', 's1', 'v', '444', 'dXU=', ?)", Math.floor(Date.now() / 1000))
+    const waiting = await api('GET', '/api/oidc/auth-query?code=c1&id=444&uuid=dXU%3D')
+    expect(waiting.json).toEqual({ error: 'No authed oidc is found' })
+    openSession({ id: alice.id }, 'ssotoken', { deviceId: '444', uuid: 'dXU=', deviceInfo: '{}', ip: '' })
+    run("UPDATE oidc_requests SET user_id=?, token='ssotoken' WHERE code='c1'", alice.id)
+    expect((await api('GET', '/api/oidc/auth-query?code=c1&id=999&uuid=x')).status).toBe(403)
+    const done = (await api('GET', '/api/oidc/auth-query?code=c1&id=444&uuid=dXU%3D')).json
+    expect(done).toMatchObject({ type: 'access_token', access_token: 'ssotoken', user: { name: 'alice', info: {} } })
+    expect((await api('POST', '/api/currentUser', {}, 'ssotoken')).json.name).toBe('alice')
+  })
+})
+
+describe('share string', () => {
+  test('decodes the way the RustDesk client does', async () => {
+    const { shareString } = await import('./console')
+    const encoded = shareString({ idServer: 'rd.example', relayServer: 'rd.example', apiServer: 'https://rd.example', key: 'abc=' })
+    const decoded = JSON.parse(Buffer.from(encoded.split('').reverse().join(''), 'base64').toString())
+    expect(decoded).toEqual({ host: 'rd.example', relay: 'rd.example', api: 'https://rd.example', key: 'abc=' })
+  })
+})

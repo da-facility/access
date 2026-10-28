@@ -15,6 +15,7 @@ export function db(): Database {
   const database = new Database(file, { create: true, strict: true })
   database.exec('PRAGMA busy_timeout=5000;')
   database.exec(schema)
+  migrate(database)
   if (file !== ':memory:') {
     try {
       chmodSync(file, 0o600)
@@ -22,6 +23,17 @@ export function db(): Database {
   }
   instance = database
   return database
+}
+
+/** Columns added after a table first shipped; CREATE TABLE IF NOT EXISTS won't add them. */
+const added: [table: string, column: string, definition: string][] = [['users', 'sso_subject', 'TEXT']]
+
+function migrate(database: Database) {
+  for (const [table, column, definition] of added) {
+    const columns = database.query(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    if (!columns.some((c) => c.name === column)) database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
+  }
+  database.exec('CREATE UNIQUE INDEX IF NOT EXISTS users_sso_subject ON users (sso_subject) WHERE sso_subject IS NOT NULL')
 }
 
 export function all<T = Row>(sql: string, ...params: Param[]): T[] {
