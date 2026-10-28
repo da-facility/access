@@ -1,4 +1,4 @@
-# rd-console
+# RustDesk API server and admin console
 
 API server and admin console for the self-hosted RustDesk at `rd.dafacility.io`.
 
@@ -9,6 +9,8 @@ The ID/relay servers (`hbbs`/`hbbr`, RustDesk OSS) run separately from `/opt/rus
 
 ## Develop
 
+From `api/`:
+
     bun install
     bun run dev        # http://localhost:3140
     bun run test
@@ -16,6 +18,6 @@ The ID/relay servers (`hbbs`/`hbbr`, RustDesk OSS) run separately from `/opt/rus
 
 ## Deploy (df-central-1)
 
-    deploy/deploy.sh
+    api/deploy/deploy.sh
 
 This builds the image on the server, then runs `deploy/compose.json` from `/opt/rd-console`. The data lives in `/opt/rd-console/data/rd.sqlite3`. Caddy (`/opt/oddball-coordinator/Caddyfile`) proxies `rd.dafacility.io` to the `rd-console` container on the `oddball-central_default` network.
