@@ -1,0 +1,38 @@
+/* Colours come from the Astryx theme, as in @da-facility/ui. */
+.app {
+  --ink: var(--color-text-primary);
+  --muted: var(--color-text-secondary);
+  --line: var(--color-border);
+  color: var(--ink);
+  font-family: var(--font-family-sans, "Helvetica Neue", sans-serif);
+}
+.app :global(.sidebar-layout) {
+  --sidebar-width: 236px;
+}
+.app :global(.sidebar-layout__rail-footer) {
+  padding: 12px;
+  border-top: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+}
+.brand div {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+}
+.brand span {
+  font-size: 12px;
+  color: var(--muted);
+}
+.workspace {
+  max-width: 1400px;
+  padding: 20px 28px 48px;
+  margin: auto;
+}
+.footer {
+  display: flex;
+}

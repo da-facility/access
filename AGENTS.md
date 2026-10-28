@@ -14,6 +14,7 @@
 * `libs/enigo/` input control
 * `libs/clipboard/` clipboard
 * `libs/base/src/config/keys.rs` the single import path for all options
+* `api/` our RustDesk API server and admin console (Bun, TanStack Start), deployed separately; see `api/README.md`
 
 ### Key Components
 - **Remote Desktop Protocol**: Custom protocol implemented in `src/rendezvous_mediator.rs` for communicating with rustdesk-server

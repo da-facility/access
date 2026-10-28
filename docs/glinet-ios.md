@@ -59,7 +59,7 @@ Protocol sources inspected on 2026-10-05:
 
 ## Account address books
 
-The optional [Access API server](../services/address-book/README.md) provides separate accounts and personal address books. Set its HTTPS origin in Settings → ID/Relay Server → API Server, then log in using the existing Account controls. Keep the existing RustDesk ID/relay configuration. The address-book tab uses its existing Add ID/editor for RustDesk machines and shows a GL.iNet KVMs row when the API server advertises that extension.
+The optional [API server](../api/README.md) provides separate accounts and personal address books. Set its HTTPS origin in Settings → ID/Relay Server → API Server, then log in using the existing Account controls. Keep the existing RustDesk ID/relay configuration. The address-book tab uses its existing Add ID/editor for RustDesk machines and shows a GL.iNet KVMs row when the API server advertises that extension.
 
 The account KVM page supports adding, editing, removing and connecting to Comet Q/X entries, plus copying an existing local client into the account. KVM passwords remain in the phone's Keychain, scoped to the API origin and account. Approved certificate fingerprints persist in the account without adding account entries to the device's local KVM list. Other API servers keep the existing address-book UI.
 
@@ -152,7 +152,7 @@ The Device Hub accessibility interface timed out, so simulator screen rendering 
 
 Known limits include English-only new labels, manual reconnect after an expired session, no separate 2FA challenge UI beyond Comet Q touchscreen approval, no video transport fallback, and unverified Comet X hardware behavior. Use the device console for features not yet implemented.
 
-The account-address-book change modifies three existing runtime files. `common/widgets/address_book.dart` adds an iOS-only, capability-gated GL.iNet row. `glinet/kvm_clients_page.dart` exposes the existing editor through an additive helper, leaving local editing unchanged. `glinet/kvm_session_page.dart` accepts an optional trust-save callback so account entries save certificate pins to the account instead of entering the local client list; sessions without that callback keep local storage. The new API/page modules and `services/address-book` contain the remaining implementation. RustDesk authentication, peer models, ID/relay routing and remote-session code are unchanged.
+The account-address-book change modifies three existing runtime files. `common/widgets/address_book.dart` adds an iOS-only, capability-gated GL.iNet row. `glinet/kvm_clients_page.dart` exposes the existing editor through an additive helper, leaving local editing unchanged. `glinet/kvm_session_page.dart` accepts an optional trust-save callback so account entries save certificate pins to the account instead of entering the local client list; sessions without that callback keep local storage. The new API/page modules and `api/` contain the remaining implementation. RustDesk authentication, peer models, ID/relay routing and remote-session code are unchanged.
 
 ## Floating controls and app switching
 
