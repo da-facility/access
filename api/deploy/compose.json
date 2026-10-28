@@ -1,0 +1,66 @@
+{
+  "name": "rd-console",
+  "services": {
+    "console": {
+      "image": "rd-console:latest",
+      "pull_policy": "never",
+      "restart": "unless-stopped",
+      "environment": {
+        "RD_DATABASE": "/data/rd.sqlite3",
+        "RD_PUBLIC_URL": "https://rd.dafacility.io",
+        "RD_OIDC_ISSUER": "https://sso.dafacility.io",
+        "RD_OIDC_CLIENT_ID": "rustdesk-console",
+        "RD_OIDC_ADMIN_GROUP": "admins",
+        "RD_ID_SERVER": "rd.dafacility.io",
+        "RD_RELAY_SERVER": "rd.dafacility.io",
+        "PORT": "3000",
+        "HOST": "0.0.0.0",
+        "RD_KEY": "HNceTLkdhHjv+zeN596vNFtKkUH0pt1EK77fKAVVp7U="
+      },
+      "read_only": true,
+      "cap_drop": [
+        "ALL"
+      ],
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "user": "1000:1000",
+      "volumes": [
+        "/opt/rd-console/data:/data"
+      ],
+      "tmpfs": [
+        "/tmp:rw,noexec,nosuid,size=16m"
+      ],
+      "networks": [
+        "proxy"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bun",
+          "-e",
+          "const r=await fetch('http://127.0.0.1:3000/healthz');process.exit(r.ok?0:1)"
+        ],
+        "interval": "30s",
+        "timeout": "5s",
+        "retries": 3
+      },
+      "logging": {
+        "driver": "local",
+        "options": {
+          "max-size": "10m",
+          "max-file": "3"
+        }
+      },
+      "init": true,
+      "mem_limit": "384m",
+      "container_name": "rd-console"
+    }
+  },
+  "networks": {
+    "proxy": {
+      "external": true,
+      "name": "oddball-central_default"
+    }
+  }
+}
