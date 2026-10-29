@@ -1,0 +1,111 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 8da29a2..a005388 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,4 +1,5 @@
+ mod rendezvous_server;
++mod secure_tcp;
+ pub use rendezvous_server::*;
+ pub mod common;
+ mod database;
+diff --git a/src/rendezvous_server.rs b/src/rendezvous_server.rs
+index dff45eb..6317ae7 100644
+--- a/src/rendezvous_server.rs
++++ b/src/rendezvous_server.rs
+@@ -1,5 +1,6 @@
+ use crate::common::*;
+ use crate::peer::*;
++use crate::secure_tcp;
+ use hbb_common::{
+     allow_err, bail,
+     bytes::{Bytes, BytesMut},
+@@ -51,7 +52,8 @@ const REG_TIMEOUT: i64 = 30_000;
+ type TcpStreamSink = SplitSink<Framed<TcpStream, BytesCodec>, Bytes>;
+ type WsSink = SplitSink<tokio_tungstenite::WebSocketStream<TcpStream>, tungstenite::Message>;
+ enum Sink {
+-    TcpStream(TcpStreamSink),
++    /// With the cipher for what goes out, once the client has answered the key exchange.
++    TcpStream(TcpStreamSink, Option<secure_tcp::Sealer>),
+     Ws(WsSink),
+ }
+ type Sender = mpsc::UnboundedSender<Data>;
+@@ -101,6 +103,12 @@ impl RendezvousServer {
+     #[tokio::main(flavor = "multi_thread")]
+     pub async fn start(port: i32, serial: i32, key: &str, rmem: usize) -> ResultType<()> {
+         let (key, sk) = Self::get_server_sk(key);
++        if sodiumoxide::init().is_err() {
++            bail!("failed to initialise libsodium");
++        }
++        if sk.is_none() {
++            log::warn!("No signing key: signed-in clients cannot secure their TCP connection");
++        }
+         let nat_port = port - 1;
+         let ws_port = port + 2;
+         let pm = PeerMap::new().await?;
+@@ -823,7 +831,11 @@ impl RendezvousServer {
+         if let Some(sink) = sink.as_mut() {
+             if let Ok(bytes) = msg.write_to_bytes() {
+                 match sink {
+-                    Sink::TcpStream(s) => {
++                    Sink::TcpStream(s, sealer) => {
++                        let bytes = match sealer {
++                            Some(sealer) => sealer.seal(&bytes),
++                            None => bytes,
++                        };
+                         allow_err!(s.send(Bytes::from(bytes)).await);
+                     }
+                     Sink::Ws(ws) => {
+@@ -1178,9 +1190,51 @@ impl RendezvousServer {
+             }
+         } else {
+             let (a, mut b) = Framed::new(stream, BytesCodec::new()).split();
+-            sink = Some(Sink::TcpStream(a));
++            sink = Some(Sink::TcpStream(a, None));
++            // Signed-in clients wait for this offer before they send their token; the others
++            // skip it.
++            let mut offer = None;
++            if let Some(sk) = self.inner.sk.as_ref() {
++                match secure_tcp::Offer::new(sk) {
++                    Ok((o, msg)) => {
++                        Self::send_to_sink(&mut sink, msg).await;
++                        offer = Some(o);
++                    }
++                    Err(err) => log::error!("key exchange offer to {:?} failed: {}", addr, err),
++                }
++            }
++            let mut opener: Option<secure_tcp::Opener> = None;
+             while let Ok(Some(Ok(bytes))) = timeout(30_000, b.next()).await {
+-                if !self.handle_tcp(&bytes, &mut sink, addr, key, ws).await {
++                // Only the first message can answer the offer.
++                if let Some(offer) = offer.take() {
++                    if let Some(answer) = secure_tcp::answer(&bytes) {
++                        match (offer.accept(&answer), sink.as_mut()) {
++                            (Ok((sealer, o)), Some(Sink::TcpStream(_, s))) => {
++                                *s = Some(sealer);
++                                opener = Some(o);
++                                continue;
++                            }
++                            (Err(err), _) => log::warn!("key exchange with {:?} failed: {}", addr, err),
++                            _ => {}
++                        }
++                        break;
++                    }
++                }
++                let plain;
++                let bytes = match opener.as_mut() {
++                    Some(opener) => match opener.open(&bytes) {
++                        Ok(p) => {
++                            plain = p;
++                            &plain[..]
++                        }
++                        Err(err) => {
++                            log::warn!("encrypted connection from {:?}: {}", addr, err);
++                            break;
++                        }
++                    },
++                    None => &bytes[..],
++                };
++                if !self.handle_tcp(bytes, &mut sink, addr, key, ws).await {
+                     break;
+                 }
+             }

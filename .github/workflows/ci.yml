@@ -12,6 +12,7 @@ on:
   pull_request:
     paths-ignore:
       - "api/**"
+      - "hbbs/**"
       - "docs/**"
       - "README.md"
   push:
@@ -19,6 +20,7 @@ on:
       - master
     paths-ignore:
       - "api/**"
+      - "hbbs/**"
       - ".github/**"
       - "docs/**"
       - "README.md"

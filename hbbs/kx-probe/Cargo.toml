@@ -1,0 +1,12 @@
+[package]
+name = "kx-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Connects to an hbbs the way RustDesk 1.5 clients do, with the client's own hbb_common and a
+# copy of its key exchange, and checks the server's answers.
+[dependencies]
+hbb_common = { path = "../../libs/hbb_common" }
+
+[workspace]
